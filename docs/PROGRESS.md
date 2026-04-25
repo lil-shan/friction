@@ -45,3 +45,4 @@
 - Ran `./gradlew build`; the first run failed on Kotlin refactor errors, then the targeted fix passed with Android compilation, lint, and all temporary logic tests.
 - Updated the app to a dark modern theme and made the friction overlay copy more engaging with rotating geography, logic, and focus prompts.
 - Changed the overlay allow window from 5 minutes to 2 minutes so friction can repeat sooner after Continue.
+- Added validated friction challenge logic and a dependency-free test. Continue now requires the countdown to finish and the input to include the expected answer.

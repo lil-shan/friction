@@ -58,6 +58,7 @@ Overlay Blocker Mode is an optional experimental mode:
 - Experimental overlay friction prompt for selected target apps when the app is at or over the daily limit, or when strict overlay mode is enabled.
 - Temporary local allow window after completing overlay friction: 2 minutes per package.
 - Dark modern UI theme with challenge-style friction prompts.
+- Challenge prompts now require the expected answer before Continue is enabled.
 
 ## Implementation Order
 

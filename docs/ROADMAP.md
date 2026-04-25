@@ -19,6 +19,7 @@
 - [x] Add Display over other apps permission handling and setup path.
 - [x] Add overlay friction prompt with countdown, challenge/intention text, leave action, and 2-minute local allow window.
 - [x] Switch the app and overlay toward a dark modern visual style.
+- [x] Validate friction challenge answers before enabling Continue.
 - [x] Add dependency-free overlay eligibility and cooldown logic test wired into Gradle `check`.
 
 ## Product Modes

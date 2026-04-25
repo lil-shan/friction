@@ -273,5 +273,32 @@ Make the overlay text more interesting with geography, puzzle, and focus prompts
 
 ### Known Issues
 
-- Challenge answers are not validated yet. The gate remains countdown complete plus nonblank response.
+- Overlay UI still uses Android Views because it runs from the accessibility service overlay, while the main app uses Compose.
+
+## 2026-04-25 Challenge Validation
+
+### Prompt Summary
+
+Update the friction overlay toward the expected dark polished UI direction and make challenge questions actually validated before Continue is enabled.
+
+### Files Changed
+
+- `README.md`
+- `app/build.gradle.kts`
+- `app/src/main/java/com/frictionwellbeing/app/FrictionChallenge.java`
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `app/src/main/java/com/frictionwellbeing/app/OverlayBlockerAccessibilityService.kt`
+- `app/src/test/java/com/frictionwellbeing/app/FrictionChallengeTest.java`
+- `docs/CODEX_LOG.md`
+- `docs/DECISIONS.md`
+- `docs/ROADMAP.md`
+
+### Build/Test Result
+
+- `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the temporary dependency-free usage limit, friction state, overlay eligibility, and friction challenge tests.
+
+### Known Issues
+
+- Challenge validation is intentionally simple text matching, not a full quiz engine.
 - Overlay UI still uses Android Views because it runs from the accessibility service overlay, while the main app uses Compose.

@@ -548,12 +548,18 @@ private fun FrictionScreen(
         }
     }
 
-    val canContinue = FrictionStateCalculator.canContinue(
+    val appLabel = target?.label ?: "this app"
+    val packageName = target?.packageName.orEmpty()
+    val challengeIndex = remember(target) {
+        FrictionChallenge.indexFor(packageName, System.currentTimeMillis())
+    }
+    val challengeText = FrictionChallenge.promptFor(challengeIndex)
+    val expectedAnswer = FrictionChallenge.expectedAnswerFor(challengeIndex)
+    val answerValid = FrictionChallenge.isAnswerValid(challengeIndex, intentionText)
+    val canContinue = answerValid && FrictionStateCalculator.canContinue(
         remainingSeconds,
         intentionText,
     )
-    val appLabel = target?.label ?: "this app"
-    val packageName = target?.packageName.orEmpty()
 
     Column(
         modifier = Modifier
@@ -574,15 +580,29 @@ private fun FrictionScreen(
         Text(
             text = if (remainingSeconds > 0) {
                 "Continue available in $remainingSeconds seconds"
+            } else if (!answerValid) {
+                "Countdown complete. Correct answer still needed."
             } else {
-                "Countdown complete"
+                "Countdown complete. Answer accepted."
             },
             style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            text = challengeText,
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            text = if (answerValid) {
+                "Answer accepted"
+            } else {
+                "Include the correct answer: $expectedAnswer"
+            },
+            style = MaterialTheme.typography.bodySmall,
         )
         OutlinedTextField(
             value = intentionText,
             onValueChange = { intentionText = it },
-            label = { Text("Answer this, then say why: Which country has Reykjavik as its capital?") },
+            label = { Text("Answer + why you want to continue") },
             minLines = 3,
             modifier = Modifier.fillMaxWidth(),
         )

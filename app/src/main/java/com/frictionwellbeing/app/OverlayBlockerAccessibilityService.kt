@@ -94,7 +94,9 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
 
         currentOverlayPackage = packageName
         var remainingSeconds = FrictionStateCalculator.COUNTDOWN_SECONDS
-        val challengeText = challengeFor(packageName)
+        val challengeIndex = FrictionChallenge.indexFor(packageName, System.currentTimeMillis())
+        val challengeText = FrictionChallenge.promptFor(challengeIndex)
+        val challengeAnswer = FrictionChallenge.expectedAnswerFor(challengeIndex)
 
         val countdownText = TextView(this).apply {
             text = "Gate opens in $remainingSeconds seconds"
@@ -102,8 +104,14 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
             setTextColor(ACCENT)
             gravity = Gravity.CENTER
         }
+        val answerText = TextView(this).apply {
+            text = "Answer required"
+            textSize = 13f
+            setTextColor(TEXT_MUTED)
+            gravity = Gravity.CENTER
+        }
         val intentionInput = EditText(this).apply {
-            hint = "Answer the prompt, then write why you want to continue."
+            hint = "Answer + why you want to continue"
             minLines = 3
             setTextColor(TEXT_PRIMARY)
             setHintTextColor(TEXT_MUTED)
@@ -117,15 +125,25 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
         }
 
         fun refreshContinueState() {
-            continueButton.isEnabled = FrictionStateCalculator.canContinue(
+            val input = intentionInput.text?.toString().orEmpty()
+            val answerValid = FrictionChallenge.isAnswerValid(challengeIndex, input)
+            continueButton.isEnabled = answerValid && FrictionStateCalculator.canContinue(
                 remainingSeconds,
-                intentionInput.text?.toString().orEmpty(),
+                input,
             )
             countdownText.text = if (remainingSeconds > 0) {
                 "Gate opens in $remainingSeconds seconds"
+            } else if (!answerValid) {
+                "Gate open. Correct answer still needed."
             } else {
-                "Gate open. Answer the prompt to continue."
+                "Gate open. You can continue."
             }
+            answerText.text = if (answerValid) {
+                "Answer accepted"
+            } else {
+                "Include the correct answer: $challengeAnswer"
+            }
+            answerText.setTextColor(if (answerValid) ACCENT else TEXT_MUTED)
         }
 
         val leaveButton = Button(this).apply {
@@ -167,9 +185,9 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
             setPadding(34, 34, 34, 34)
             background = roundedDrawable(SURFACE, 34f, STROKE, 2)
             addView(TextView(context).apply {
-                text = "Mind check"
-                textSize = 14f
-                letterSpacing = 0.08f
+                text = "FRICTION CHECK"
+                textSize = 12f
+                letterSpacing = 0.12f
                 setTextColor(ACCENT)
                 gravity = Gravity.CENTER
             })
@@ -187,12 +205,13 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
             })
             addView(TextView(context).apply {
                 text = challengeText
-                textSize = 18f
+                textSize = 20f
                 setTextColor(TEXT_PRIMARY)
                 gravity = Gravity.CENTER
                 setPadding(0, 26, 0, 22)
             })
             addView(countdownText)
+            addView(answerText)
             addView(intentionInput, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -316,21 +335,6 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
     private fun hasOverlayPermission(): Boolean =
         android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M ||
             Settings.canDrawOverlays(this)
-
-    private fun challengeFor(packageName: String): String {
-        val challenges = listOf(
-            "Geography check: Which country has Reykjavik as its capital?",
-            "Puzzle check: What comes next: 2, 4, 8, 16, __?",
-            "Map check: Which ocean is west of Morocco?",
-            "Logic check: If today is Saturday, what day is it in three days?",
-            "Geography check: Which continent contains the Andes?",
-            "Focus check: Name one thing you came here to do, not scroll past.",
-        )
-        val seed = (System.currentTimeMillis() /
-            OverlayFrictionEligibility.DEFAULT_ALLOW_WINDOW_MILLIS +
-            packageName.hashCode()).toInt()
-        return challenges[Math.floorMod(seed, challenges.size)]
-    }
 
     private fun roundedDrawable(
         color: Int,

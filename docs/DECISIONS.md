@@ -30,4 +30,4 @@
 - Add strict overlay mode as an explicit local toggle for phone testing before a target app reaches the daily limit.
 - Store only a per-package allow-until timestamp for overlay cooldown. The default allow window is 2 minutes so friction can return quickly during real use.
 - Keep overlay eligibility and cooldown rules in a small plain Java class so they can be tested without adding dependencies.
-- Use challenge-style friction copy for the overlay instead of a plain intention prompt. Answers are not validated in this slice; the gate remains countdown complete plus nonblank response.
+- Use challenge-style friction copy for the overlay instead of a plain intention prompt. Continue requires the countdown to finish and the input to include the expected challenge answer.
