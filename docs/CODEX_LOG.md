@@ -603,3 +603,48 @@ Replace the Shorts/Reels light-mode challenge overlay with a custom disabled ove
 ### Known Issues
 
 - Shorts/Reels detection remains heuristic and app-version dependent.
+
+## 2026-04-25 Shorts/Reels Surface Scope Fix
+
+### Prompt Summary
+
+Fix Shorts/Reels mode so the active timer overlays only when the detected short-video surface is visible, not across all Instagram or YouTube screens.
+
+### Files Changed
+
+- `app/src/main/java/com/frictionwellbeing/app/OverlayBlockerAccessibilityService.kt`
+- `docs/ARCHITECTURE.md`
+- `docs/CODEX_LOG.md`
+- `docs/PROGRESS.md`
+
+### Build/Test Result
+
+- `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the dependency-free logic tests.
+
+### Known Issues
+
+- Shorts/Reels detection remains heuristic and app-version dependent.
+
+## 2026-04-25 Performance and README Pass
+
+### Prompt Summary
+
+Reduce app lag, document setup in detail, then commit and push to GitHub.
+
+### Files Changed
+
+- `README.md`
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `docs/CODEX_LOG.md`
+- `docs/PROGRESS.md`
+
+### Build/Test Result
+
+- `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the dependency-free logic tests.
+
+### Known Issues
+
+- Shorts/Reels detection remains heuristic and app-version dependent.
+- Launcher behavior still needs physical-device testing as the default Home app.

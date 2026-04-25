@@ -19,7 +19,9 @@ Core Mode is the default app experience:
 Launcher Mode is an optional custom Android launcher:
 
 - Shows installed apps.
-- Target app icons can move or randomize positions inside Friction Wellbeing's launcher.
+- Launcher Off shows all apps in stable order.
+- Focus Launcher hides selected distraction targets.
+- Shuffle Launcher / Icon Swapper randomizes positions inside Friction Wellbeing's launcher after phone unlock.
 - Opening target apps triggers friction first.
 - Non-target apps open normally.
 - The app must not try to move icons on the user's existing launcher.
@@ -36,7 +38,7 @@ Overlay Blocker Mode is an optional experimental mode:
 - This may be risky for Google Play review.
 - Must be clearly disclosed and opt-in.
 - Must not claim perfect Reels/Shorts blocking.
-- Does not detect Reels or Shorts specifically yet.
+- Shorts / Reels mode detects visible YouTube Shorts and Instagram Reels surfaces heuristically and shows a timed disabled overlay.
 
 ## Current Implementation
 
@@ -77,6 +79,107 @@ Overlay Blocker Mode is an optional experimental mode:
 - The launcher uses the current wallpaper as a best-effort background when Android exposes it.
 - Target apps opened from Friction's launcher go through the friction challenge first; non-target apps open normally.
 - Android does not expose icon positions from other launchers, so Friction cannot import or move the user's existing Pixel/Samsung/Nova home-screen layout.
+- Performance pass:
+  - Launchable app metadata is cached after first load.
+  - App icons are downscaled before display.
+  - Wallpaper loading is asynchronous and downscaled.
+  - Shorts/Reels accessibility scans are throttled and capped.
+
+## Phone Setup
+
+### Install Debug Build
+
+Build and install with Gradle when the device is stable:
+
+```bash
+./gradlew installDebug
+```
+
+If Gradle loses the device during install, build first and install with ADB directly:
+
+```bash
+./gradlew assembleDebug
+adb devices -l
+adb -s <device-id> install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Required Android Settings
+
+Open Friction, then configure the permissions you need:
+
+- Usage Access: required for daily usage totals.
+- Display over other apps: required for overlay prompts.
+- Accessibility Service: required for Overlay Blocker and Shorts / Reels mode.
+- Default Home app: required for Friction Launcher Mode and Icon Swapper.
+
+After installing a build that changes the AccessibilityService XML, turn the Friction Accessibility Service off and on again. Android may not apply new accessibility capabilities until the service is restarted.
+
+### Launcher Setup
+
+To make Friction act like a real launcher:
+
+1. Open Friction.
+2. Go to `Settings`.
+3. Under `Launcher mode`, tap `Open Default Home settings`.
+4. Select `Friction` as the default Home app.
+5. Press the phone Home button.
+
+Launcher modes:
+
+- `Launcher Off`: stable app grid.
+- `Focus Launcher`: hides selected distraction apps.
+- `Shuffle Launcher / Icon Swapper`: shows all apps and reshuffles Friction's launcher grid after phone unlock.
+
+### Friction Setup
+
+In the app:
+
+1. Use `Apps` to select distraction targets.
+2. Use `Home` to choose a friction mode.
+3. Use `Settings` to enable overlay permissions and optional strict mode.
+
+Friction modes:
+
+- `Friction Off`: disables overlay friction.
+- `Light`: easier challenge, longer repeat window.
+- `Heavy`: harder challenge, shorter repeat window.
+- `Shorts / Reels`: disables detected YouTube Shorts or Instagram Reels behind a timed overlay.
+- `Ultra Focus`: blocks selected target apps until its focus timer ends.
+
+## Troubleshooting
+
+### `installDebug` says no device or device not found
+
+Check ADB:
+
+```bash
+adb devices -l
+```
+
+If the phone is missing or unauthorized:
+
+```bash
+adb kill-server
+adb start-server
+adb devices -l
+```
+
+Then accept the USB debugging prompt on the phone. If Gradle still loses the device, install the APK directly:
+
+```bash
+adb -s <device-id> install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Shorts / Reels does not trigger
+
+- Confirm `Shorts / Reels` is selected in Friction mode.
+- Confirm Accessibility Service and Display over other apps are enabled.
+- Turn the Friction Accessibility Service off and on again after installing a new build.
+- Detection is heuristic and depends on the current YouTube/Instagram UI labels.
+
+### Launcher toggle appears to do nothing
+
+Launcher modes only affect the actual home screen after Friction is selected as the default Home app. Inside the normal Friction app, the launcher controls only configure behavior.
 
 ## Implementation Order
 

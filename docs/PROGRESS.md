@@ -78,3 +78,6 @@
 - Broadened Shorts/Reels detection to inspect accessibility text, content descriptions, selected/focused state, and known view IDs.
 - Replaced the Shorts/Reels light-style challenge prompt with a custom timed disabled overlay.
 - Moved wallpaper loading off the initial Compose path and throttled Shorts/Reels accessibility scans to reduce lag.
+- Scoped the active Shorts/Reels lock timer to the detected short-video surface instead of locking the whole Instagram or YouTube app.
+- Added a performance pass: cached launchable app metadata, downscaled icons/wallpaper bitmaps, kept wallpaper loading asynchronous, and kept Shorts/Reels accessibility scans throttled.
+- Expanded README with phone setup, launcher setup, friction modes, install troubleshooting, and Shorts/Reels troubleshooting.

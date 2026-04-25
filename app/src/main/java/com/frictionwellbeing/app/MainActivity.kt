@@ -94,6 +94,7 @@ import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.Random
 import kotlin.math.ceil
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -123,6 +124,9 @@ private data class InstalledApp(
     val packageName: String,
     val icon: ImageBitmap?,
 )
+
+@Volatile
+private var cachedLaunchableApps: List<InstalledApp>? = null
 
 private data class SelectedAppUsage(
     val label: String,
@@ -1721,21 +1725,25 @@ private fun SettingsScreen(
 }
 
 private fun loadLaunchableApps(context: Context): List<InstalledApp> {
+    cachedLaunchableApps?.let { return it }
+
     val packageManager = context.packageManager
     val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-    return queryLaunchableActivities(packageManager, intent)
+    val apps = queryLaunchableActivities(packageManager, intent)
         .mapNotNull { resolveInfo ->
             val packageName = resolveInfo.activityInfo?.packageName ?: return@mapNotNull null
             InstalledApp(
                 label = resolveInfo.loadLabel(packageManager).toString(),
                 packageName = packageName,
                 icon = runCatching {
-                    resolveInfo.loadIcon(packageManager).toImageBitmap()
+                    resolveInfo.loadIcon(packageManager).toImageBitmap(maxSizePx = APP_ICON_BITMAP_SIZE)
                 }.getOrNull(),
             )
         }
         .distinctBy { it.packageName }
         .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
+    cachedLaunchableApps = apps
+    return apps
 }
 
 private fun launchTargetApp(context: Context, packageName: String) {
@@ -1838,9 +1846,18 @@ private fun queryLaunchableActivities(
         packageManager.queryIntentActivities(intent, 0)
     }
 
-private fun Drawable.toImageBitmap(): ImageBitmap {
-    val width = intrinsicWidth.takeIf { it > 0 } ?: 48
-    val height = intrinsicHeight.takeIf { it > 0 } ?: 48
+private fun Drawable.toImageBitmap(maxSizePx: Int? = null): ImageBitmap {
+    val sourceWidth = intrinsicWidth.takeIf { it > 0 } ?: FALLBACK_BITMAP_SIZE
+    val sourceHeight = intrinsicHeight.takeIf { it > 0 } ?: FALLBACK_BITMAP_SIZE
+    val scale = maxSizePx?.let { maxSize ->
+        if (sourceWidth <= maxSize && sourceHeight <= maxSize) {
+            1f
+        } else {
+            maxSize.toFloat() / maxOf(sourceWidth, sourceHeight).toFloat()
+        }
+    } ?: 1f
+    val width = (sourceWidth * scale).roundToInt().coerceAtLeast(1)
+    val height = (sourceHeight * scale).roundToInt().coerceAtLeast(1)
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     setBounds(0, 0, canvas.width, canvas.height)
@@ -1851,7 +1868,7 @@ private fun Drawable.toImageBitmap(): ImageBitmap {
 @SuppressLint("MissingPermission")
 private fun loadCurrentWallpaper(context: Context): ImageBitmap? =
     runCatching {
-        WallpaperManager.getInstance(context).drawable?.toImageBitmap()
+        WallpaperManager.getInstance(context).drawable?.toImageBitmap(maxSizePx = WALLPAPER_BITMAP_SIZE)
     }.getOrNull()
 
 private fun hasUsageAccess(context: Context): Boolean {
@@ -1918,6 +1935,9 @@ private fun UsageLimitCalculator.Status.dashboardLabel(): String =
     }
 
 private const val MILLIS_PER_MINUTE = 60L * 1000L
+private const val APP_ICON_BITMAP_SIZE = 96
+private const val WALLPAPER_BITMAP_SIZE = 720
+private const val FALLBACK_BITMAP_SIZE = 48
 private val WellnessDeep = Color(0xFF000000)
 private val WellnessInk = Color(0xFF080808)
 private val WellnessCard = Color(0xFF141414)

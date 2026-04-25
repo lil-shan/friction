@@ -84,6 +84,10 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
             if (!hasOverlayPermission()) {
                 return
             }
+            val onShortVideoSurface = isShortsOrReelsSurface(packageName, now)
+            if (!onShortVideoSurface) {
+                return
+            }
             if (lockedUntilMillis > now) {
                 showShortsReelsDisabledOverlay(
                     packageName = packageName,
@@ -92,18 +96,16 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
                 )
                 return
             }
-            if (isShortsOrReelsSurface(packageName, now)) {
-                val nextLockedUntilMillis = now + AppSettings.allowWindowMillis(
-                    this,
-                    OverlayRepeatMode.SHORTS_REELS,
-                )
-                AppSettings.saveAllowedUntilMillis(this, packageName, nextLockedUntilMillis)
-                showShortsReelsDisabledOverlay(
-                    packageName = packageName,
-                    appLabel = loadApplicationLabel(packageName),
-                    lockedUntilMillis = nextLockedUntilMillis,
-                )
-            }
+            val nextLockedUntilMillis = now + AppSettings.allowWindowMillis(
+                this,
+                OverlayRepeatMode.SHORTS_REELS,
+            )
+            AppSettings.saveAllowedUntilMillis(this, packageName, nextLockedUntilMillis)
+            showShortsReelsDisabledOverlay(
+                packageName = packageName,
+                appLabel = loadApplicationLabel(packageName),
+                lockedUntilMillis = nextLockedUntilMillis,
+            )
             return
         }
 
