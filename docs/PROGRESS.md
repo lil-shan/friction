@@ -26,3 +26,22 @@
 - Installed Android command-line tools and SDK packages under `~/Android/Sdk`, then added local `sdk.dir` in untracked `local.properties`.
 - Applied safe review fixes: targeted `PACKAGE_USAGE_STATS` lint suppression, privacy wording, at-or-over limit wording, `HorizontalDivider`, and `mutableIntStateOf`.
 - Ran `./gradlew build`; build passed with lint and the temporary usage limit test.
+- Added a demo-only friction preparation screen for selected apps that are at or over the daily limit.
+- Added a 10-second countdown, intention prompt, disabled continue state, and cancel path back to the dashboard.
+- Added dependency-free friction state logic and a temporary plain Java test runner wired into Gradle `check`.
+- Ran `./gradlew build`; build passed with lint plus the usage limit and friction state logic tests.
+- Confirmed the friction screen is the reusable Core Mode flow for dashboard demo now and future Launcher/Overlay entry points later.
+- Updated product direction documentation to define Core Mode, optional Launcher Mode, and optional experimental Overlay Blocker Mode.
+- Documented that Launcher Mode must not move icons on the user's existing launcher.
+- Documented that Overlay Blocker Mode would be opt-in, heuristic, potentially fragile, and potentially risky for Google Play review.
+- Updated the implementation order: add optional launcher mode, add optional overlay blocker mode, then add notification inbox later.
+- Implemented the first experimental Overlay Blocker enforcement slice.
+- Improved the dashboard with cards for selected apps, daily limit, permission status, usage, friction status, and overlay blocker setup.
+- Added an Overlay Blocker settings screen with local opt-in toggle, strict overlay toggle, and links to Usage Access, Accessibility, and Display over other apps settings.
+- Added `OverlayBlockerAccessibilityService` for package-level foreground app detection of selected targets, starting with Instagram package support for `com.instagram.android`.
+- Added `SYSTEM_ALERT_WINDOW` permission, AccessibilityService manifest entry, and service XML config with window content retrieval disabled.
+- Added a system overlay friction prompt with 10-second countdown, intention prompt, Continue gating, Leave action, and 2-minute local allow window.
+- Added dependency-free overlay eligibility and cooldown logic tests wired into Gradle `check`.
+- Ran `./gradlew build`; the first run failed on Kotlin refactor errors, then the targeted fix passed with Android compilation, lint, and all temporary logic tests.
+- Updated the app to a dark modern theme and made the friction overlay copy more engaging with rotating geography, logic, and focus prompts.
+- Changed the overlay allow window from 5 minutes to 2 minutes so friction can repeat sooner after Continue.

@@ -49,7 +49,11 @@ val usageLimitUnitTestClasses = layout.buildDirectory.dir("usageLimitUnitTest/cl
 
 tasks.register<JavaCompile>("compileUsageLimitUnitTest") {
     source(
+        "src/main/java/com/frictionwellbeing/app/FrictionStateCalculator.java",
+        "src/main/java/com/frictionwellbeing/app/OverlayFrictionEligibility.java",
         "src/main/java/com/frictionwellbeing/app/UsageLimitCalculator.java",
+        "src/test/java/com/frictionwellbeing/app/FrictionStateCalculatorTest.java",
+        "src/test/java/com/frictionwellbeing/app/OverlayFrictionEligibilityTest.java",
         "src/test/java/com/frictionwellbeing/app/UsageLimitCalculatorTest.java",
     )
     classpath = files()
@@ -64,6 +68,20 @@ tasks.register<JavaExec>("runUsageLimitUnitTest") {
     mainClass.set("com.frictionwellbeing.app.UsageLimitCalculatorTest")
 }
 
+tasks.register<JavaExec>("runFrictionStateUnitTest") {
+    dependsOn("compileUsageLimitUnitTest")
+    classpath = files(usageLimitUnitTestClasses)
+    mainClass.set("com.frictionwellbeing.app.FrictionStateCalculatorTest")
+}
+
+tasks.register<JavaExec>("runOverlayFrictionEligibilityTest") {
+    dependsOn("compileUsageLimitUnitTest")
+    classpath = files(usageLimitUnitTestClasses)
+    mainClass.set("com.frictionwellbeing.app.OverlayFrictionEligibilityTest")
+}
+
 tasks.named("check") {
     dependsOn("runUsageLimitUnitTest")
+    dependsOn("runFrictionStateUnitTest")
+    dependsOn("runOverlayFrictionEligibilityTest")
 }

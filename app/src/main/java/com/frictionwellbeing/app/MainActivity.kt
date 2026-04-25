@@ -3,6 +3,7 @@ package com.frictionwellbeing.app
 import android.app.AppOpsManager
 import android.app.usage.UsageStats
 import android.app.usage.UsageStatsManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -15,12 +16,14 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,21 +34,25 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,6 +62,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -62,6 +70,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 import kotlin.math.ceil
@@ -84,6 +93,8 @@ private enum class Screen(val title: String) {
     Apps("Apps"),
     UsageAccess("Usage Access"),
     Settings("Settings"),
+    Overlay("Overlay"),
+    Friction("Friction"),
 }
 
 private data class InstalledApp(
@@ -98,6 +109,11 @@ private data class SelectedAppUsage(
     val todayUsageMinutes: Int,
 )
 
+private data class FrictionTarget(
+    val label: String,
+    val packageName: String,
+)
+
 private sealed interface DashboardUsageState {
     data object Empty : DashboardUsageState
     data object Loading : DashboardUsageState
@@ -108,28 +124,22 @@ private sealed interface DashboardUsageState {
     ) : DashboardUsageState
 }
 
-private class FrictionPreferences(context: Context) {
+private class FrictionPreferences(private val context: Context) {
     private val preferences: SharedPreferences =
         context.getSharedPreferences("friction_wellbeing", Context.MODE_PRIVATE)
 
     fun selectedPackages(): Set<String> =
-        preferences.getStringSet(KEY_SELECTED_PACKAGES, emptySet()).orEmpty().toSet()
+        AppSettings.selectedPackages(context)
 
     fun saveSelectedPackages(packageNames: Set<String>) {
-        preferences.edit().putStringSet(KEY_SELECTED_PACKAGES, packageNames).apply()
+        AppSettings.saveSelectedPackages(context, packageNames)
     }
 
     fun dailyLimitMinutes(): Int =
-        preferences.getInt(KEY_DAILY_LIMIT_MINUTES, DEFAULT_DAILY_LIMIT_MINUTES)
+        AppSettings.dailyLimitMinutes(context)
 
     fun saveDailyLimitMinutes(minutes: Int) {
-        preferences.edit().putInt(KEY_DAILY_LIMIT_MINUTES, minutes).apply()
-    }
-
-    private companion object {
-        const val KEY_SELECTED_PACKAGES = "selected_packages"
-        const val KEY_DAILY_LIMIT_MINUTES = "daily_limit_minutes"
-        const val DEFAULT_DAILY_LIMIT_MINUTES = 15
+        AppSettings.saveDailyLimitMinutes(context, minutes)
     }
 }
 
@@ -139,14 +149,21 @@ private fun FrictionApp(preferences: FrictionPreferences) {
     var screen by remember { mutableStateOf(Screen.Dashboard) }
     var selectedPackages by remember { mutableStateOf(preferences.selectedPackages()) }
     var dailyLimitMinutes by remember { mutableIntStateOf(preferences.dailyLimitMinutes()) }
+    var frictionTarget by remember { mutableStateOf<FrictionTarget?>(null) }
 
     MaterialTheme(
-        colorScheme = lightColorScheme(
-            primary = androidx.compose.ui.graphics.Color(0xFF1E6B5C),
-            secondary = androidx.compose.ui.graphics.Color(0xFF8C5E2A),
-            tertiary = androidx.compose.ui.graphics.Color(0xFF3D5A80),
-            background = androidx.compose.ui.graphics.Color(0xFFFCFBF7),
-            surface = androidx.compose.ui.graphics.Color(0xFFFFFFFF),
+        colorScheme = darkColorScheme(
+            primary = Color(0xFF48E0B8),
+            secondary = Color(0xFFFFB86B),
+            tertiary = Color(0xFF8EA7FF),
+            background = Color(0xFF090D12),
+            surface = Color(0xFF121922),
+            surfaceVariant = Color(0xFF1A2430),
+            onPrimary = Color(0xFF06231C),
+            onSecondary = Color(0xFF2B1700),
+            onBackground = Color(0xFFE8EEF5),
+            onSurface = Color(0xFFE8EEF5),
+            onSurfaceVariant = Color(0xFFC6D0DA),
         ),
     ) {
         Surface(modifier = Modifier.fillMaxSize()) {
@@ -156,14 +173,16 @@ private fun FrictionApp(preferences: FrictionPreferences) {
                 },
                 bottomBar = {
                     NavigationBar {
-                        Screen.entries.forEach { item ->
-                            NavigationBarItem(
-                                selected = screen == item,
-                                onClick = { screen = item },
-                                label = { Text(item.title) },
-                                icon = { Text(item.title.first().toString()) },
-                            )
-                        }
+                        Screen.entries
+                            .filterNot { it == Screen.Friction }
+                            .forEach { item ->
+                                NavigationBarItem(
+                                    selected = screen == item,
+                                    onClick = { screen = item },
+                                    label = { Text(item.title) },
+                                    icon = { Text(item.title.first().toString()) },
+                                )
+                            }
                     }
                 },
             ) { innerPadding ->
@@ -179,6 +198,11 @@ private fun FrictionApp(preferences: FrictionPreferences) {
                             onChooseApps = { screen = Screen.Apps },
                             onOpenSettings = { screen = Screen.Settings },
                             onOpenUsageAccess = { screen = Screen.UsageAccess },
+                            onConfigureOverlay = { screen = Screen.Overlay },
+                            onStartFrictionDemo = { target ->
+                                frictionTarget = target
+                                screen = Screen.Friction
+                            },
                         )
 
                         Screen.Apps -> AppSelectionScreen(
@@ -198,6 +222,20 @@ private fun FrictionApp(preferences: FrictionPreferences) {
                                 preferences.saveDailyLimitMinutes(minutes)
                             },
                         )
+
+                        Screen.Overlay -> OverlayBlockerSettingsScreen()
+
+                        Screen.Friction -> FrictionScreen(
+                            target = frictionTarget,
+                            onCancel = {
+                                frictionTarget = null
+                                screen = Screen.Dashboard
+                            },
+                            onContinue = {
+                                frictionTarget = null
+                                screen = Screen.Dashboard
+                            },
+                        )
                     }
                 }
             }
@@ -212,10 +250,16 @@ private fun DashboardScreen(
     onChooseApps: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenUsageAccess: () -> Unit,
+    onConfigureOverlay: () -> Unit,
+    onStartFrictionDemo: (FrictionTarget) -> Unit,
 ) {
     val context = LocalContext.current
     var refreshCount by remember { mutableIntStateOf(0) }
     var usageState by remember { mutableStateOf<DashboardUsageState>(DashboardUsageState.Loading) }
+    val usageAccessGranted = hasUsageAccess(context)
+    val overlayBlockerEnabled = AppSettings.overlayBlockerEnabled(context)
+    val overlayPermissionGranted = hasOverlayPermission(context)
+    val accessibilityEnabled = isOverlayAccessibilityServiceEnabled(context)
 
     LaunchedEffect(selectedPackages, dailyLimitMinutes, refreshCount) {
         usageState = when {
@@ -240,77 +284,317 @@ private fun DashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(
-            text = "Daily limit",
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Text(
-            text = "$dailyLimitMinutes minutes",
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        Text(
-            text = "Selected apps: ${selectedPackages.size}",
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Text("Dashboard", style = MaterialTheme.typography.headlineMedium)
+
+        DashboardCard(title = "Selected apps") {
+            Text("${selectedPackages.size} target apps selected")
+            Button(onClick = onChooseApps) {
+                Text("Select apps")
+            }
+        }
+
+        DashboardCard(title = "Daily limit") {
+            Text("$dailyLimitMinutes minutes")
+            TextButton(onClick = onOpenSettings) {
+                Text("Edit limit")
+            }
+        }
+
+        DashboardCard(title = "Permissions status") {
+            Text("Usage Access: ${if (usageAccessGranted) "Enabled" else "Needed"}")
+            Text("Accessibility Service: ${if (accessibilityEnabled) "Enabled" else "Needed for overlay blocker"}")
+            Text("Display over other apps: ${if (overlayPermissionGranted) "Enabled" else "Needed for overlay blocker"}")
+            Button(onClick = onOpenUsageAccess) {
+                Text("Open Usage Access settings")
+            }
+            TextButton(onClick = onConfigureOverlay) {
+                Text("Configure overlay blocker")
+            }
+        }
 
         when (val state = usageState) {
-            DashboardUsageState.Empty -> Text("No apps selected yet.")
-            DashboardUsageState.Loading -> Text("Loading today's usage...")
+            DashboardUsageState.Empty -> DashboardCard(title = "Today's usage") {
+                Text("No apps selected yet.")
+            }
+
+            DashboardUsageState.Loading -> DashboardCard(title = "Today's usage") {
+                Text("Loading today's usage...")
+            }
+
             DashboardUsageState.PermissionDenied -> {
-                Text(
-                    text = "Usage Access is required to show today's selected-app usage.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Button(onClick = onOpenUsageAccess) {
-                    Text("Review Usage Access")
+                DashboardCard(title = "Today's usage") {
+                    Text(
+                        text = "Usage Access is required to show today's selected-app usage.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
             }
 
             is DashboardUsageState.Loaded -> {
-                Text(
-                    text = "${state.summary.totalUsageMinutes} of ${state.summary.dailyLimitMinutes} minutes used today",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = state.summary.status.dashboardLabel(),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    items(state.apps, key = { it.packageName }) { app ->
-                        Column {
-                            Text(
-                                text = app.label,
-                                style = MaterialTheme.typography.titleSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = "${app.todayUsageMinutes} min today - ${app.packageName}",
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                val frictionTargets = state.apps
+                    .filter { FrictionStateCalculator.isAtOrOverLimit(it.todayUsageMinutes, dailyLimitMinutes) }
+                    .map { app ->
+                        FrictionTarget(
+                            label = app.label,
+                            packageName = app.packageName,
+                        )
+                    }
+
+                DashboardCard(title = "Today's usage") {
+                    Text(
+                        text = "${state.summary.totalUsageMinutes} of ${state.summary.dailyLimitMinutes} minutes used today",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = state.summary.status.dashboardLabel(),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.height(140.dp),
+                    ) {
+                        items(state.apps, key = { it.packageName }) { app ->
+                            Column {
+                                Text(
+                                    text = app.label,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = "${app.todayUsageMinutes} min today - ${app.packageName}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
+                    }
+                }
+
+                DashboardCard(title = "Friction status") {
+                    Text(if (frictionTargets.isEmpty()) {
+                        "No selected app is at or over the daily limit."
+                    } else {
+                        "${frictionTargets.size} selected app(s) can show friction."
+                    })
+                    Button(
+                        enabled = frictionTargets.isNotEmpty(),
+                        onClick = { frictionTargets.firstOrNull()?.let(onStartFrictionDemo) },
+                    ) {
+                        Text("Test friction screen")
+                    }
+                    if (frictionTargets.isNotEmpty()) {
+                        Text("Available demo targets:")
+                    }
+                    frictionTargets.forEach { target ->
+                        Text("${target.label} (${target.packageName})")
+                    }
+                }
+
+                DashboardCard(title = "Overlay blocker") {
+                    Text(if (overlayBlockerEnabled) {
+                        "Overlay Blocker Mode is on."
+                    } else {
+                        "Overlay Blocker Mode is off."
+                    })
+                    Text("Instagram package support starts with com.instagram.android.")
+                    Text("After Continue, friction can return after about 2 minutes.")
+                    Button(onClick = onConfigureOverlay) {
+                        Text("Configure overlay blocker")
                     }
                 }
             }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = onChooseApps) {
-                Text("Choose apps")
-            }
-            TextButton(onClick = onOpenSettings) {
-                Text("Edit limit")
-            }
             TextButton(onClick = { refreshCount += 1 }) {
                 Text("Refresh")
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardCard(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            content()
+        }
+    }
+}
+
+@Composable
+private fun OverlayBlockerSettingsScreen() {
+    val context = LocalContext.current
+    var overlayEnabled by remember { mutableStateOf(AppSettings.overlayBlockerEnabled(context)) }
+    var strictMode by remember { mutableStateOf(AppSettings.strictOverlayMode(context)) }
+    var refreshCount by remember { mutableIntStateOf(0) }
+    val usageAccessGranted = hasUsageAccess(context)
+    val overlayPermissionGranted = hasOverlayPermission(context)
+    val accessibilityEnabled = isOverlayAccessibilityServiceEnabled(context)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text("Overlay Blocker Mode", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            text = "Optional experimental mode. It detects selected target apps such as Instagram by package name and can show a friction overlay before you continue. It does not detect Reels or Shorts yet.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            text = "This requires Usage Access, Accessibility Service, and Display over other apps permission. You must enable each permission yourself.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+
+        DashboardCard(title = "Mode") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Overlay Blocker Mode")
+                    Text("Default is off. Enable only if you understand the permissions.")
+                }
+                Switch(
+                    checked = overlayEnabled,
+                    onCheckedChange = { enabled ->
+                        overlayEnabled = enabled
+                        AppSettings.saveOverlayBlockerEnabled(context, enabled)
+                    },
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Strict overlay mode")
+                    Text("Show friction for selected apps even before the daily limit.")
+                }
+                Switch(
+                    checked = strictMode,
+                    onCheckedChange = { enabled ->
+                        strictMode = enabled
+                        AppSettings.saveStrictOverlayMode(context, enabled)
+                    },
+                )
+            }
+        }
+
+        DashboardCard(title = "Setup status") {
+            Text("Usage Access: ${if (usageAccessGranted) "Enabled" else "Required"}")
+            Text("Accessibility Service: ${if (accessibilityEnabled) "Enabled" else "Required"}")
+            Text("Display over other apps: ${if (overlayPermissionGranted) "Enabled" else "Required"}")
+            Text("Selected target apps: ${AppSettings.selectedPackages(context).size}")
+        }
+
+        DashboardCard(title = "Permissions") {
+            Button(onClick = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }) {
+                Text("Open Usage Access settings")
+            }
+            Button(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) {
+                Text("Open Accessibility settings")
+            }
+            Button(onClick = { context.startActivity(overlayPermissionIntent(context)) }) {
+                Text("Open Display over other apps settings")
+            }
+            TextButton(onClick = { refreshCount += 1 }) {
+                Text("Refresh setup status")
+            }
+            if (refreshCount > 0) {
+                Text("Status refreshed.")
+            }
+        }
+
+        Text(
+            text = "After you complete friction, the same target app gets a short 2-minute allow window before the overlay can return. Detection may vary by Android version and OEM. This mode does not read private screen text and does not upload data.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun FrictionScreen(
+    target: FrictionTarget?,
+    onCancel: () -> Unit,
+    onContinue: () -> Unit,
+) {
+    var remainingSeconds by remember(target) {
+        mutableIntStateOf(FrictionStateCalculator.COUNTDOWN_SECONDS)
+    }
+    var intentionText by remember(target) { mutableStateOf("") }
+
+    LaunchedEffect(target) {
+        remainingSeconds = FrictionStateCalculator.COUNTDOWN_SECONDS
+        while (remainingSeconds > 0) {
+            delay(1000L)
+            remainingSeconds -= 1
+        }
+    }
+
+    val canContinue = FrictionStateCalculator.canContinue(
+        remainingSeconds,
+        intentionText,
+    )
+    val appLabel = target?.label ?: "this app"
+    val packageName = target?.packageName.orEmpty()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            text = "Pause before opening $appLabel",
+            style = MaterialTheme.typography.headlineSmall,
+        )
+        if (packageName.isNotBlank()) {
+            Text(
+                text = packageName,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Text(
+            text = if (remainingSeconds > 0) {
+                "Continue available in $remainingSeconds seconds"
+            } else {
+                "Countdown complete"
+            },
+            style = MaterialTheme.typography.titleMedium,
+        )
+        OutlinedTextField(
+            value = intentionText,
+            onValueChange = { intentionText = it },
+            label = { Text("Answer this, then say why: Which country has Reykjavik as its capital?") },
+            minLines = 3,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                enabled = canContinue,
+                onClick = onContinue,
+            ) {
+                Text("Continue")
+            }
+            TextButton(onClick = onCancel) {
+                Text("Cancel")
             }
         }
     }
@@ -630,6 +914,34 @@ private fun hasUsageAccess(context: Context): Boolean {
     }
 
     return mode == AppOpsManager.MODE_ALLOWED
+}
+
+private fun hasOverlayPermission(context: Context): Boolean =
+    Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
+
+private fun overlayPermissionIntent(context: Context): Intent =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${context.packageName}"),
+        )
+    } else {
+        Intent(Settings.ACTION_SETTINGS)
+    }
+
+private fun isOverlayAccessibilityServiceEnabled(context: Context): Boolean {
+    val expectedService = ComponentName(
+        context,
+        OverlayBlockerAccessibilityService::class.java,
+    ).flattenToString()
+    val enabledServices = Settings.Secure.getString(
+        context.contentResolver,
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+    ) ?: return false
+
+    return enabledServices
+        .split(':')
+        .any { it.equals(expectedService, ignoreCase = true) }
 }
 
 private fun Long.toDisplayMinutes(): Int {
