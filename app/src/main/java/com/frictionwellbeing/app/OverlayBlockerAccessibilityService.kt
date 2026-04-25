@@ -751,18 +751,26 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
         val signals = collectAccessibilitySignals(root)
         val result = if (packageName == YOUTUBE_PACKAGE) {
             signals.any { signal ->
-                signal.value.contains("shorts", ignoreCase = true) &&
-                    (signal.selected || signal.focused || signal.value.contains("watch", ignoreCase = true))
+                val value = signal.value.normalizedAccessibilityValue()
+                val selectedShortsTab = value == "shorts" && signal.selected
+                selectedShortsTab ||
+                    value.contains("shorts player")
             }
         } else {
             signals.any { signal ->
-                val value = signal.value
-                val selectedReelsTab = value.equals("reels", ignoreCase = true) &&
-                    (signal.selected || signal.focused)
+                val value = signal.value.normalizedAccessibilityValue()
+                val selectedReelsTab = value == "reels" && signal.selected
                 selectedReelsTab ||
-                    value.contains("instagram reels", ignoreCase = true) ||
-                    value.contains("clips_viewer", ignoreCase = true) ||
-                    value.contains("reels_viewer", ignoreCase = true)
+                    value.contains("instagram reels") ||
+                    value.contains("clips viewer") ||
+                    value.contains("reels viewer") ||
+                    value.contains("reel viewer") ||
+                    value.contains("reel tray") ||
+                    value.contains("clips media") ||
+                    value.contains("clips viewer viewer") ||
+                    value.contains("reel media viewer") ||
+                    value.contains("reels media viewer") ||
+                    value.contains("clips viewer view pager")
             }
         }
         lastShortSurfaceCheckPackage = packageName
@@ -774,7 +782,7 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
     private fun collectAccessibilitySignals(root: AccessibilityNodeInfo): List<AccessibilitySignal> {
         val values = mutableListOf<AccessibilitySignal>()
         fun visit(node: AccessibilityNodeInfo?, depth: Int) {
-            if (node == null || depth > 7 || values.size > 48) {
+            if (node == null || depth > 9 || values.size > 96) {
                 return
             }
             fun add(value: CharSequence?) {
@@ -805,6 +813,11 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
         val selected: Boolean,
         val focused: Boolean,
     )
+
+    private fun String.normalizedAccessibilityValue(): String =
+        lowercase()
+            .replace('_', ' ')
+            .replace('-', ' ')
 
     private fun hasOverlayPermission(): Boolean =
         android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M ||
