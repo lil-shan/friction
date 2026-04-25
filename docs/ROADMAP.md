@@ -23,6 +23,15 @@
 - [x] Add Light, Heavy, and Ultra Focus overlay repeat modes.
 - [x] Schedule overlay repeat checks so friction can return while the target app remains foreground.
 - [x] Add dependency-free overlay eligibility and cooldown logic test wired into Gradle `check`.
+- [x] Add optional Launcher Mode as a Friction-owned launcher grid.
+- [x] Keep Launcher Mode out of normal in-app navigation so it behaves like a launcher only.
+- [x] Add icon move-around toggle for Friction's launcher grid.
+- [x] Shuffle Friction launcher icons after phone unlock when move-around is enabled.
+- [x] Add Focus Launcher and Shuffle Launcher profiles.
+- [x] Add explicit Launcher Off mode.
+- [x] Use the current wallpaper as a best-effort launcher background.
+- [x] Add explicit Friction Off mode.
+- [x] Add opt-in Shorts / Reels overlay mode for YouTube Shorts and Instagram Reels heuristics.
 
 ## Product Modes
 
@@ -38,15 +47,19 @@
 
 - Optional custom Android launcher.
 - Shows installed apps.
-- Target app icons can move or randomize positions inside Friction Wellbeing's launcher.
+- Launcher Off shows all apps in stable order.
+- Focus Launcher hides selected distraction targets so only needed apps appear.
+- Shuffle Launcher shows all apps and randomizes positions inside Friction Wellbeing's launcher.
 - Opening target apps triggers friction first.
 - Non-target apps open normally.
-- Must not try to move icons on the user's existing launcher.
+- Icon move-around is controlled separately from Focus modes.
+- Android does not expose icon positions from other launchers, so Friction cannot import or rearrange an existing launcher layout.
 
 ### Overlay Blocker Mode
 
 - Optional experimental mode.
 - Uses `AccessibilityService` to detect selected target apps by foreground package name.
+- Shorts / Reels mode uses window-content retrieval to detect visible Shorts/Reels UI labels.
 - Starts with package-level Instagram support for `com.instagram.android`.
 - Uses overlay permission to show a friction overlay.
 - Detection is heuristic and not guaranteed.
@@ -54,18 +67,18 @@
 - May be risky for Google Play review.
 - Must be clearly disclosed and opt-in.
 - Must not claim perfect Reels/Shorts blocking.
-- Does not detect Reels or Shorts specifically yet.
+- Shorts/Reels detection is heuristic and not guaranteed.
 
 ## Current Implementation Order
 
 1. Harden reusable friction and overlay blocker behavior.
-2. Add optional launcher mode.
+2. Continue testing optional launcher mode.
 3. Add notification inbox later.
 
 ## Next
 
 - [ ] Test Overlay Blocker Mode on physical Android devices and document OEM-specific behavior.
-- [ ] Add optional Launcher Mode after overlay blocker hardening.
+- [ ] Test Launcher Mode on physical Android devices, including default launcher selection and unlock shuffling.
 - [ ] Add notification inbox later.
 - [ ] Add basic UI tests where practical.
 - [ ] Replace the temporary dependency-free logic tests with a standard Android/JUnit test setup when dependency policy allows.

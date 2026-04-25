@@ -428,3 +428,178 @@ Move Light/Heavy/Ultra mode selection to the Home screen, move friction status a
 ### Known Issues
 
 - Ultra Focus still intentionally prevents switching modes inside the app until its timer ends.
+
+## 2026-04-25 Launcher Icon Move-Around Mode
+
+### Prompt Summary
+
+Add a separate icon move-around option for Launcher Mode, distinct from Light/Heavy/Ultra Focus modes, so Friction's own launcher icons can move every time the phone is unlocked.
+
+### Files Changed
+
+- `README.md`
+- `app/src/main/AndroidManifest.xml`
+- `app/src/main/java/com/frictionwellbeing/app/AppSettings.kt`
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `app/src/main/java/com/frictionwellbeing/app/UnlockShuffleReceiver.kt`
+- `app/src/test/java/com/frictionwellbeing/app/FrictionChallengeTest.java`
+- `docs/ARCHITECTURE.md`
+- `docs/CODEX_LOG.md`
+- `docs/DECISIONS.md`
+- `docs/PRIVACY.md`
+- `docs/PROGRESS.md`
+- `docs/ROADMAP.md`
+
+### Build/Test Result
+
+- First `./gradlew build` failed because the existing hard challenge test expected an older Andes/South America prompt while the current prompt set uses a logic challenge.
+- Updated the test input to match the current logic challenge validator.
+- Second `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the dependency-free usage limit, friction state, overlay eligibility, friction challenge, and overlay repeat mode tests.
+
+### Known Issues
+
+- Launcher Mode must be tested on physical Android devices, especially default launcher selection and unlock broadcast behavior.
+- Icon move-around only shuffles Friction's own launcher grid. Android does not expose or allow mutation of another launcher's icon positions.
+
+## 2026-04-25 Full Launcher Profiles
+
+### Prompt Summary
+
+Turn the icon move-around idea into a real launcher experience when Friction is selected as the Android Home app. Add Focus Launcher and Shuffle Launcher profiles, use the current wallpaper when available, and document that existing launcher icon positions cannot be retrieved.
+
+### Files Changed
+
+- `README.md`
+- `app/src/main/java/com/frictionwellbeing/app/AppSettings.kt`
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `app/src/main/java/com/frictionwellbeing/app/UnlockShuffleReceiver.kt`
+- `docs/ARCHITECTURE.md`
+- `docs/CODEX_LOG.md`
+- `docs/DECISIONS.md`
+- `docs/PRIVACY.md`
+- `docs/PROGRESS.md`
+- `docs/ROADMAP.md`
+
+### Build/Test Result
+
+- First `./gradlew build` failed on nullable wallpaper drawable handling.
+- Second `./gradlew build` failed because lint flags `WallpaperManager.getDrawable` as permission-sensitive.
+- Added a best-effort wallpaper fallback with targeted lint suppression.
+- Final `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the dependency-free logic tests.
+
+### Known Issues
+
+- Must test on a physical Android device as the default launcher.
+- Current wallpaper retrieval may be unavailable on some devices; the launcher falls back to the dark background.
+- Android does not provide public APIs to import or rearrange icon positions from another launcher.
+
+## 2026-04-25 Launcher-Only Navigation
+
+### Prompt Summary
+
+Remove Launcher Mode from the normal in-app tab flow so it behaves like a launcher only when Friction is selected as Android Home.
+
+### Files Changed
+
+- `README.md`
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `docs/ARCHITECTURE.md`
+- `docs/CODEX_LOG.md`
+- `docs/PROGRESS.md`
+- `docs/ROADMAP.md`
+
+### Build/Test Result
+
+- `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the dependency-free logic tests.
+
+### Known Issues
+
+- Must test on a physical Android device as the default launcher.
+
+## 2026-04-25 Off Modes and Shorts/Reels Overlay
+
+### Prompt Summary
+
+Add explicit Off modes for Friction overlay and Launcher Mode, make launcher toggles clearer, and add a Shorts/Reels overlay mode that targets YouTube Shorts and Instagram Reels surfaces.
+
+### Files Changed
+
+- `README.md`
+- `app/src/main/java/com/frictionwellbeing/app/AppSettings.kt`
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `app/src/main/java/com/frictionwellbeing/app/OverlayBlockerAccessibilityService.kt`
+- `app/src/main/java/com/frictionwellbeing/app/OverlayRepeatMode.java`
+- `app/src/main/res/xml/overlay_blocker_accessibility_service.xml`
+- `docs/ARCHITECTURE.md`
+- `docs/CODEX_LOG.md`
+- `docs/DECISIONS.md`
+- `docs/PRIVACY.md`
+- `docs/PROGRESS.md`
+- `docs/ROADMAP.md`
+
+### Build/Test Result
+
+- `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the dependency-free logic tests.
+
+### Known Issues
+
+- Shorts/Reels detection is heuristic and must be tested on physical devices with current YouTube and Instagram versions.
+- Enabling Shorts/Reels detection requires Accessibility window-content retrieval.
+
+## 2026-04-25 Launcher and Shorts/Reels Follow-Up
+
+### Prompt Summary
+
+Clarify where the launcher icon swapper went and improve Shorts/Reels detection after device testing showed it was not working.
+
+### Files Changed
+
+- `README.md`
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `app/src/main/java/com/frictionwellbeing/app/OverlayBlockerAccessibilityService.kt`
+- `app/src/main/res/values/strings.xml`
+- `docs/ARCHITECTURE.md`
+- `docs/CODEX_LOG.md`
+- `docs/PRIVACY.md`
+- `docs/PROGRESS.md`
+
+### Build/Test Result
+
+- `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the dependency-free logic tests.
+
+### Known Issues
+
+- Android may require toggling the Friction accessibility service off and on after the service XML changes.
+- Shorts/Reels detection remains heuristic and app-version dependent.
+
+## 2026-04-25 Shorts/Reels Timed Lock
+
+### Prompt Summary
+
+Replace the Shorts/Reels light-mode challenge overlay with a custom disabled overlay, keep short-video surfaces locked until the configured timer ends, and reduce lag from wallpaper loading and frequent accessibility scans.
+
+### Files Changed
+
+- `README.md`
+- `app/src/main/java/com/frictionwellbeing/app/AppSettings.kt`
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `app/src/main/java/com/frictionwellbeing/app/OverlayBlockerAccessibilityService.kt`
+- `docs/ARCHITECTURE.md`
+- `docs/CODEX_LOG.md`
+- `docs/PROGRESS.md`
+
+### Build/Test Result
+
+- First `./gradlew build` failed on Kotlin smart-casting of nullable wallpaper state.
+- Fixed the wallpaper state render path with a local immutable value.
+- Second `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the dependency-free logic tests.
+
+### Known Issues
+
+- Shorts/Reels detection remains heuristic and app-version dependent.

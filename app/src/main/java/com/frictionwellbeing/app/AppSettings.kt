@@ -13,6 +13,9 @@ object AppSettings {
     private const val KEY_LIGHT_MODE_MINUTES = "light_mode_minutes"
     private const val KEY_HEAVY_MODE_MINUTES = "heavy_mode_minutes"
     private const val KEY_ULTRA_FOCUS_MINUTES = "ultra_focus_minutes"
+    private const val KEY_ICON_SHUFFLE_ENABLED = "icon_shuffle_enabled"
+    private const val KEY_LAUNCHER_MODE = "launcher_mode"
+    private const val KEY_LAUNCHER_SHUFFLE_SEED = "launcher_shuffle_seed"
     private const val ALLOWED_UNTIL_PREFIX = "allowed_until_"
     private const val DEFAULT_DAILY_LIMIT_MINUTES = 15
 
@@ -31,7 +34,8 @@ object AppSettings {
     }
 
     fun overlayBlockerEnabled(context: Context): Boolean =
-        preferences(context).getBoolean(KEY_OVERLAY_BLOCKER_ENABLED, false)
+        overlayRepeatMode(context) != OverlayRepeatMode.OFF &&
+            preferences(context).getBoolean(KEY_OVERLAY_BLOCKER_ENABLED, false)
 
     fun saveOverlayBlockerEnabled(context: Context, enabled: Boolean) {
         preferences(context).edit().putBoolean(KEY_OVERLAY_BLOCKER_ENABLED, enabled).apply()
@@ -45,11 +49,14 @@ object AppSettings {
     }
 
     fun overlayRepeatMode(context: Context): String =
-        preferences(context).getString(KEY_OVERLAY_REPEAT_MODE, OverlayRepeatMode.HEAVY)
-            ?: OverlayRepeatMode.HEAVY
+        preferences(context).getString(KEY_OVERLAY_REPEAT_MODE, OverlayRepeatMode.OFF)
+            ?: OverlayRepeatMode.OFF
 
     fun saveOverlayRepeatMode(context: Context, mode: String) {
-        preferences(context).edit().putString(KEY_OVERLAY_REPEAT_MODE, mode).apply()
+        preferences(context).edit()
+            .putString(KEY_OVERLAY_REPEAT_MODE, mode)
+            .putBoolean(KEY_OVERLAY_BLOCKER_ENABLED, mode != OverlayRepeatMode.OFF)
+            .apply()
     }
 
     fun lightModeMinutes(context: Context): Int =
@@ -91,7 +98,8 @@ object AppSettings {
     fun allowWindowMillis(context: Context, mode: String): Long =
         when (mode) {
             OverlayRepeatMode.LIGHT -> OverlayRepeatMode.minutesToMillis(lightModeMinutes(context))
-            OverlayRepeatMode.HEAVY -> OverlayRepeatMode.minutesToMillis(heavyModeMinutes(context))
+            OverlayRepeatMode.HEAVY,
+            OverlayRepeatMode.SHORTS_REELS -> OverlayRepeatMode.minutesToMillis(heavyModeMinutes(context))
             else -> 0L
         }
 
@@ -118,6 +126,47 @@ object AppSettings {
             .apply()
     }
 
+    fun iconShuffleEnabled(context: Context): Boolean =
+        launcherMode(context) == LauncherMode.SHUFFLE
+
+    fun saveIconShuffleEnabled(context: Context, enabled: Boolean) {
+        preferences(context).edit().putBoolean(KEY_ICON_SHUFFLE_ENABLED, enabled).apply()
+        saveLauncherMode(context, if (enabled) LauncherMode.SHUFFLE else LauncherMode.OFF)
+    }
+
+    fun launcherMode(context: Context): String =
+        preferences(context).getString(KEY_LAUNCHER_MODE, null)
+            ?: if (preferences(context).getBoolean(KEY_ICON_SHUFFLE_ENABLED, false)) {
+                LauncherMode.SHUFFLE
+            } else {
+                LauncherMode.OFF
+            }
+
+    fun saveLauncherMode(context: Context, mode: String) {
+        preferences(context).edit()
+            .putString(KEY_LAUNCHER_MODE, mode)
+            .putBoolean(KEY_ICON_SHUFFLE_ENABLED, mode == LauncherMode.SHUFFLE)
+            .apply()
+        if (mode == LauncherMode.SHUFFLE) {
+            shuffleLauncherIcons(context)
+        }
+    }
+
+    fun launcherShuffleSeed(context: Context): Long =
+        preferences(context).getLong(KEY_LAUNCHER_SHUFFLE_SEED, 0L)
+
+    fun shuffleLauncherIcons(context: Context, nowMillis: Long = System.currentTimeMillis()) {
+        preferences(context).edit()
+            .putLong(KEY_LAUNCHER_SHUFFLE_SEED, nowMillis)
+            .apply()
+    }
+
     private fun preferences(context: Context) =
         context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+}
+
+object LauncherMode {
+    const val OFF = "off"
+    const val FOCUS = "focus"
+    const val SHUFFLE = "shuffle"
 }

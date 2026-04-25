@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">Friction</string>
     <string name="overlay_blocker_service_label">Friction Overlay Blocker</string>
-    <string name="overlay_blocker_service_description">Detects selected target apps by package name so Friction can show an optional friction overlay.</string>
+    <string name="overlay_blocker_service_description">Detects selected target apps and optional Shorts/Reels surfaces so Friction can show an opt-in friction overlay.</string>
 </resources>

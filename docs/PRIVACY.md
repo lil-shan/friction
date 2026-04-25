@@ -11,6 +11,9 @@ The MVP stores:
 - Overlay repeat mode.
 - Ultra Focus end timestamp.
 - Temporary per-package overlay allow-until timestamps.
+- Launcher icon move-around on/off state.
+- Launcher mode.
+- Launcher shuffle seed.
 
 The MVP locally queries usage stats:
 
@@ -23,9 +26,7 @@ The MVP does not:
 
 - Read notifications.
 - Upload data to a server.
-- Implement launcher mode.
-- Detect Reels or Shorts specifically.
-- Read private screen text for overlay blocking.
+- Upload screen content.
 - Persist usage durations or friction intention text.
 
 Usage Access is explained and linked from the app. Usage data is read locally for dashboard display only.
@@ -38,16 +39,16 @@ Core Mode should continue to keep data local by default. The later notification 
 
 ### Launcher Mode
 
-Launcher Mode will be optional. It may display and arrange installed apps inside Friction Wellbeing's own launcher UI. It must not attempt to move, randomize, or modify icons on the user's existing launcher.
+Launcher Mode is optional. It displays and arranges installed apps inside Friction Wellbeing's own launcher UI when Friction is selected as the Android launcher. It may use the current wallpaper as a best-effort local background. It must not attempt to move, randomize, modify, or import icons from the user's existing launcher.
 
 ### Overlay Blocker Mode
 
 Overlay Blocker Mode is optional and experimental. It requires:
 
-- Accessibility permission to detect selected target apps by foreground package name.
+- Accessibility permission to detect selected target apps by foreground package name and, in Shorts / Reels mode, inspect visible UI labels for known short-video surfaces.
 - Overlay permission to show a friction overlay.
 
-This mode is clearly disclosed and opt-in. It currently starts with package-level Instagram support for `com.instagram.android`; it does not detect Reels or Shorts specifically. Detection must be described as heuristic, not guaranteed, and may vary by Android version or OEM. Instagram and YouTube UI changes may break future screen-specific detection. The app must not claim perfect Reels/Shorts blocking.
+This mode is clearly disclosed and opt-in. It currently supports package-level selected-app blocking and an opt-in Shorts / Reels mode for `com.instagram.android` and `com.google.android.youtube`. Shorts / Reels mode uses Accessibility window-content retrieval to inspect visible UI labels, selected tab state, content descriptions, and known view IDs for Shorts/Reels surfaces. Detection must be described as heuristic, not guaranteed, and may vary by Android version or OEM. Instagram and YouTube UI changes may break screen-specific detection. The app must not claim perfect Reels/Shorts blocking.
 
 Overlay Blocker Mode may be risky for Google Play review because it relies on sensitive Android capabilities.
 

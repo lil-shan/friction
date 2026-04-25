@@ -57,18 +57,31 @@ Overlay Blocker Mode is an optional experimental mode:
 - Experimental `AccessibilityService` that detects selected foreground target apps by package name.
 - Experimental overlay friction prompt for selected target apps when the app is at or over the daily limit, or when strict overlay mode is enabled.
 - Mode-based overlay repeat behavior:
+  - Off: overlay friction is disabled.
   - Light: friction can return after 10 minutes.
   - Heavy: friction can return after 2 minutes.
+  - Shorts / Reels: detected YouTube Shorts or Instagram Reels surfaces are disabled behind a timed overlay.
+    - After updates, Android may require turning the Friction accessibility service off and on again before Shorts/Reels detection can read visible labels.
   - Ultra Focus: selected target apps stay blocked for a 25-minute focus window.
 - Dark modern UI theme with challenge-style friction prompts.
 - Challenge prompts now require the expected answer before Continue is enabled.
 - Production visual pass with a black UI, white secondary text, yellow accent, stronger hierarchy, four bottom tabs, rounded cards, status chips, usage bubbles, and a richer overlay blocker panel.
 - Branded typography pass with stronger display/title/body hierarchy and permission setup folded into Settings instead of a primary tab.
+- Friction can register as an Android home app candidate and show a full-screen launcher when selected as the default launcher.
+- Launcher Mode is not shown as a normal in-app tab; it appears only when Android starts Friction as Home.
+- Launcher Mode has two profiles:
+  - Launcher Off: all apps stay visible in a stable order.
+  - Focus Launcher: only needed apps are shown; selected distraction targets are hidden.
+  - Shuffle Launcher: all apps are shown and reshuffled after phone unlock.
+    - Also shown as Icon Swapper in Settings.
+- The launcher uses the current wallpaper as a best-effort background when Android exposes it.
+- Target apps opened from Friction's launcher go through the friction challenge first; non-target apps open normally.
+- Android does not expose icon positions from other launchers, so Friction cannot import or move the user's existing Pixel/Samsung/Nova home-screen layout.
 
 ## Implementation Order
 
 1. Harden reusable friction and overlay blocker behavior.
-2. Add optional launcher mode.
+2. Continue testing optional launcher mode.
 3. Add notification inbox later.
 
 ## Build

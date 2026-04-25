@@ -1,6 +1,8 @@
 package com.frictionwellbeing.app
 
+import android.annotation.SuppressLint
 import android.app.AppOpsManager
+import android.app.WallpaperManager
 import android.app.usage.UsageStats
 import android.app.usage.UsageStatsManager
 import android.content.ComponentName
@@ -36,6 +38,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -73,6 +78,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -86,6 +92,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.util.Calendar
+import java.util.Random
 import kotlin.math.ceil
 
 class MainActivity : ComponentActivity() {
@@ -96,6 +103,7 @@ class MainActivity : ComponentActivity() {
                 preferences = remember {
                     FrictionPreferences(applicationContext)
                 },
+                startOnLauncher = shouldStartOnLauncher(intent),
             )
         }
     }
@@ -106,6 +114,7 @@ private enum class Screen(val title: String) {
     Apps("Apps"),
     Focus("Focus"),
     Settings("Settings"),
+    Launcher("Launcher"),
     Friction("Friction"),
 }
 
@@ -157,11 +166,18 @@ private class FrictionPreferences(private val context: Context) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FrictionApp(preferences: FrictionPreferences) {
-    var screen by remember { mutableStateOf(Screen.Dashboard) }
+private fun FrictionApp(
+    preferences: FrictionPreferences,
+    startOnLauncher: Boolean,
+) {
+    val context = LocalContext.current
+    var screen by remember {
+        mutableStateOf(if (startOnLauncher) Screen.Launcher else Screen.Dashboard)
+    }
     var selectedPackages by remember { mutableStateOf(preferences.selectedPackages()) }
     var dailyLimitMinutes by remember { mutableIntStateOf(preferences.dailyLimitMinutes()) }
     var frictionTarget by remember { mutableStateOf<FrictionTarget?>(null) }
+    var pendingLaunchPackage by remember { mutableStateOf<String?>(null) }
 
     MaterialTheme(
         colorScheme = darkColorScheme(
@@ -183,6 +199,45 @@ private fun FrictionApp(preferences: FrictionPreferences) {
             modifier = Modifier.fillMaxSize(),
             color = WellnessInk,
         ) {
+            if (startOnLauncher && (screen == Screen.Launcher || screen == Screen.Friction)) {
+                if (screen == Screen.Launcher) {
+                    LauncherScreen(
+                        selectedPackages = selectedPackages,
+                        fullScreenHome = true,
+                        onOpenSettings = { screen = Screen.Settings },
+                        onLaunchApp = { app ->
+                            if (app.packageName in selectedPackages) {
+                                pendingLaunchPackage = app.packageName
+                                frictionTarget = FrictionTarget(
+                                    label = app.label,
+                                    packageName = app.packageName,
+                                )
+                                screen = Screen.Friction
+                            } else {
+                                launchTargetApp(context, app.packageName)
+                            }
+                        },
+                    )
+                } else {
+                    FrictionScreen(
+                        target = frictionTarget,
+                        onCancel = {
+                            pendingLaunchPackage = null
+                            frictionTarget = null
+                            screen = Screen.Launcher
+                        },
+                        onContinue = {
+                            pendingLaunchPackage?.let { packageName ->
+                                launchTargetApp(context, packageName)
+                            }
+                            pendingLaunchPackage = null
+                            frictionTarget = null
+                            screen = Screen.Launcher
+                        },
+                    )
+                }
+                return@Surface
+            }
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
@@ -205,7 +260,7 @@ private fun FrictionApp(preferences: FrictionPreferences) {
                 bottomBar = {
                     NavigationBar(containerColor = WellnessDeep.copy(alpha = 0.96f)) {
                         Screen.entries
-                            .filterNot { it == Screen.Friction }
+                            .filterNot { it == Screen.Friction || it == Screen.Launcher }
                             .forEach { item ->
                                 NavigationBarItem(
                                     selected = screen == item,
@@ -263,12 +318,30 @@ private fun FrictionApp(preferences: FrictionPreferences) {
                         Screen.Friction -> FrictionScreen(
                             target = frictionTarget,
                             onCancel = {
+                                pendingLaunchPackage = null
                                 frictionTarget = null
-                                screen = Screen.Dashboard
+                                screen = if (startOnLauncher) Screen.Launcher else Screen.Dashboard
                             },
                             onContinue = {
+                                pendingLaunchPackage?.let { packageName ->
+                                    launchTargetApp(context, packageName)
+                                }
+                                pendingLaunchPackage = null
                                 frictionTarget = null
-                                screen = Screen.Dashboard
+                                screen = if (startOnLauncher) Screen.Launcher else Screen.Dashboard
+                            },
+                        )
+
+                        Screen.Launcher -> DashboardScreen(
+                            selectedPackages = selectedPackages,
+                            dailyLimitMinutes = dailyLimitMinutes,
+                            onChooseApps = { screen = Screen.Apps },
+                            onOpenSettings = { screen = Screen.Settings },
+                            onOpenUsageAccess = { screen = Screen.Settings },
+                            onConfigureOverlay = { screen = Screen.Settings },
+                            onStartFrictionDemo = { target ->
+                                frictionTarget = target
+                                screen = Screen.Friction
                             },
                         )
                     }
@@ -277,6 +350,9 @@ private fun FrictionApp(preferences: FrictionPreferences) {
         }
     }
 }
+
+private fun shouldStartOnLauncher(intent: Intent?): Boolean =
+    intent?.categories?.contains(Intent.CATEGORY_HOME) == true
 
 @Composable
 private fun HeroPanel(
@@ -486,6 +562,13 @@ private fun OverlayModeSelector(
         ultraFocusUntil > nowMillis
 
     RepeatModeButton(
+        title = "Friction Off",
+        subtitle = "No overlay friction. Usage tracking and launcher settings stay available.",
+        selected = repeatMode == OverlayRepeatMode.OFF,
+        enabled = !ultraFocusActive,
+        onClick = { onModeChanged(OverlayRepeatMode.OFF, 0L) },
+    )
+    RepeatModeButton(
         title = "Light",
         subtitle = "Easy questions. Repeats after $lightMinutes min.",
         selected = repeatMode == OverlayRepeatMode.LIGHT,
@@ -498,6 +581,13 @@ private fun OverlayModeSelector(
         selected = repeatMode == OverlayRepeatMode.HEAVY,
         enabled = !ultraFocusActive,
         onClick = { onModeChanged(OverlayRepeatMode.HEAVY, 0L) },
+    )
+    RepeatModeButton(
+        title = "Shorts / Reels",
+        subtitle = "Only shows overlay friction on YouTube Shorts and Instagram Reels surfaces.",
+        selected = repeatMode == OverlayRepeatMode.SHORTS_REELS,
+        enabled = !ultraFocusActive,
+        onClick = { onModeChanged(OverlayRepeatMode.SHORTS_REELS, 0L) },
     )
     RepeatModeButton(
         title = "Ultra Focus",
@@ -1065,6 +1155,236 @@ private fun AppSelectionScreen(
 }
 
 @Composable
+private fun LauncherScreen(
+    selectedPackages: Set<String>,
+    fullScreenHome: Boolean,
+    onOpenSettings: () -> Unit,
+    onLaunchApp: (InstalledApp) -> Unit,
+) {
+    val context = LocalContext.current
+    var apps by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var launcherMode by remember { mutableStateOf(AppSettings.launcherMode(context)) }
+    var shuffleSeed by remember { mutableStateOf(AppSettings.launcherShuffleSeed(context)) }
+    var wallpaper by remember { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(Unit) {
+        apps = withContext(Dispatchers.IO) {
+            loadLaunchableApps(context)
+                .filterNot { it.packageName == context.packageName }
+        }
+        isLoading = false
+    }
+
+    LaunchedEffect(fullScreenHome) {
+        if (fullScreenHome) {
+            wallpaper = withContext(Dispatchers.IO) {
+                loadCurrentWallpaper(context)
+            }
+        }
+    }
+
+    val launcherApps = remember(apps, selectedPackages, launcherMode, shuffleSeed) {
+        when (launcherMode) {
+            LauncherMode.FOCUS -> apps.filterNot { it.packageName in selectedPackages }
+            LauncherMode.SHUFFLE -> apps.shuffled(Random(shuffleSeed.takeIf { it != 0L } ?: 1L))
+            else -> apps
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(appBackgroundBrush()),
+    ) {
+        val currentWallpaper = wallpaper
+        if (currentWallpaper != null) {
+            Image(
+                bitmap = currentWallpaper,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = if (currentWallpaper == null) 0f else 0.42f)),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Spacer(Modifier.height(if (fullScreenHome) 34.dp else 12.dp))
+            LauncherHeader(
+                fullScreenHome = fullScreenHome,
+                launcherMode = launcherMode,
+                selectedCount = selectedPackages.size,
+                onOpenSettings = onOpenSettings,
+            ) {
+                launcherMode = it
+                AppSettings.saveLauncherMode(context, it)
+                shuffleSeed = AppSettings.launcherShuffleSeed(context)
+            }
+
+            when {
+                isLoading -> Text("Loading launcher apps...")
+                launcherApps.isEmpty() -> DashboardCard(title = "Focus launcher") {
+                    Text(
+                        if (launcherMode == LauncherMode.FOCUS) {
+                            "No needed apps to show. Unselect apps on the Apps tab to let them appear here."
+                        } else {
+                            "No launchable apps found."
+                        },
+                    )
+                }
+                else -> LazyVerticalGrid(
+                    columns = GridCells.Fixed(4),
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    gridItems(launcherApps, key = { it.packageName }) { app ->
+                        LauncherAppTile(
+                            app = app,
+                            selectedTarget = app.packageName in selectedPackages,
+                            onClick = { onLaunchApp(app) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LauncherHeader(
+    fullScreenHome: Boolean,
+    launcherMode: String,
+    selectedCount: Int,
+    onOpenSettings: () -> Unit,
+    onLauncherModeChanged: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(if (fullScreenHome) 26.dp else 32.dp))
+            .background(WellnessCard.copy(alpha = if (fullScreenHome) 0.72f else 0.92f))
+            .border(1.dp, WellnessLime.copy(alpha = 0.24f), RoundedCornerShape(if (fullScreenHome) 26.dp else 32.dp))
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column {
+                Text(
+                    text = if (fullScreenHome) "Friction Launcher" else "Launcher",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                )
+                Text(
+                text = if (launcherMode == LauncherMode.FOCUS) {
+                    "Focus launcher hides selected distraction apps."
+                } else if (launcherMode == LauncherMode.SHUFFLE) {
+                    "Shuffle launcher reorders icons after each unlock."
+                } else {
+                    "Launcher effects are off. Apps stay visible and stable."
+                },
+                color = WellnessMuted,
+            )
+            }
+            QuietButton(onClick = onOpenSettings) {
+                Text("Settings")
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatusChip(
+                when (launcherMode) {
+                    LauncherMode.FOCUS -> "Focus launcher"
+                    LauncherMode.SHUFFLE -> "Shuffle launcher"
+                    else -> "Launcher off"
+                },
+                WellnessLime,
+            )
+            StatusChip("$selectedCount hidden targets", WellnessText)
+        }
+        RepeatModeButton(
+            title = "Launcher Off",
+            subtitle = "Show all apps in a stable order. No hiding and no unlock shuffle.",
+            selected = launcherMode == LauncherMode.OFF,
+            enabled = true,
+            onClick = { onLauncherModeChanged(LauncherMode.OFF) },
+        )
+        RepeatModeButton(
+            title = "Focus Launcher",
+            subtitle = "Only needed apps show. Selected distraction targets are hidden.",
+            selected = launcherMode == LauncherMode.FOCUS,
+            enabled = true,
+            onClick = { onLauncherModeChanged(LauncherMode.FOCUS) },
+        )
+        RepeatModeButton(
+            title = "Shuffle Launcher",
+            subtitle = "Icon Swapper: all apps show, and this launcher grid shuffles after phone unlock.",
+            selected = launcherMode == LauncherMode.SHUFFLE,
+            enabled = true,
+            onClick = { onLauncherModeChanged(LauncherMode.SHUFFLE) },
+        )
+    }
+}
+
+@Composable
+private fun LauncherAppTile(
+    app: InstalledApp,
+    selectedTarget: Boolean,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(126.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (selectedTarget) {
+                WellnessLime.copy(alpha = 0.18f)
+            } else {
+                WellnessCard.copy(alpha = 0.86f)
+            },
+            contentColor = WellnessText,
+        ),
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (app.icon != null) {
+                Image(
+                    bitmap = app.icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(42.dp),
+                )
+            } else {
+                BrandMark(size = 42)
+            }
+            Text(
+                text = app.label,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (selectedTarget) {
+                Text("Friction", style = MaterialTheme.typography.labelLarge, color = WellnessLime)
+            }
+        }
+    }
+}
+
+@Composable
 private fun AppRow(
     app: InstalledApp,
     selected: Boolean,
@@ -1126,13 +1446,17 @@ private fun FocusScreen() {
     val ultraActive = repeatMode == OverlayRepeatMode.ULTRA_FOCUS && ultraUntil > now
     val selectedCount = AppSettings.selectedPackages(context).size
     val modeLabel = when (repeatMode) {
+        OverlayRepeatMode.OFF -> "Off"
         OverlayRepeatMode.LIGHT -> "Light"
+        OverlayRepeatMode.SHORTS_REELS -> "Shorts / Reels"
         OverlayRepeatMode.ULTRA_FOCUS -> "Ultra Focus"
         else -> "Heavy"
     }
     val modeCopy = when {
         ultraActive -> "Target apps are locked for ${((ultraUntil - now) / 60000L).coerceAtLeast(1L)} more min."
+        repeatMode == OverlayRepeatMode.OFF -> "Overlay friction is off."
         repeatMode == OverlayRepeatMode.LIGHT -> "Friction repeats after 10 minutes."
+        repeatMode == OverlayRepeatMode.SHORTS_REELS -> "Overlay friction only appears on YouTube Shorts and Instagram Reels surfaces."
         repeatMode == OverlayRepeatMode.ULTRA_FOCUS -> "Ultra Focus is ready. Start it from Settings."
         else -> "Friction repeats after 2 minutes."
     }
@@ -1164,8 +1488,10 @@ private fun FocusScreen() {
         }
 
         DashboardCard(title = "How it behaves") {
+            Text("Off leaves overlay friction disabled.")
             Text("Light gives breathing room with a longer repeat window.")
             Text("Heavy keeps pressure on with a 2-minute repeat.")
+            Text("Shorts / Reels targets only YouTube Shorts and Instagram Reels tabs.")
             Text("Ultra Focus blocks selected target apps until its timer ends.")
             Text("Change modes from Settings.", color = WellnessMuted)
         }
@@ -1219,6 +1545,7 @@ private fun SettingsScreen(
     var strictMode by remember { mutableStateOf(AppSettings.strictOverlayMode(context)) }
     var repeatMode by remember { mutableStateOf(AppSettings.overlayRepeatMode(context)) }
     var ultraFocusUntil by remember { mutableStateOf(AppSettings.ultraFocusUntilMillis(context)) }
+    var launcherMode by remember { mutableStateOf(AppSettings.launcherMode(context)) }
     var refreshCount by remember { mutableIntStateOf(0) }
     val parsedValue = textValue.toIntOrNull()
     val isValid = parsedValue != null && parsedValue > 0
@@ -1281,6 +1608,46 @@ private fun SettingsScreen(
                 },
             ) {
                 Text("Test friction")
+            }
+        }
+
+        DashboardCard(title = "Launcher mode") {
+            RepeatModeButton(
+                title = "Launcher Off",
+                subtitle = "Show all apps in stable order when Friction is the Home app.",
+                selected = launcherMode == LauncherMode.OFF,
+                enabled = true,
+                onClick = {
+                    launcherMode = LauncherMode.OFF
+                    AppSettings.saveLauncherMode(context, LauncherMode.OFF)
+                },
+            )
+            RepeatModeButton(
+                title = "Focus Launcher",
+                subtitle = "Only needed apps show on the Friction home screen. Selected distraction targets are hidden.",
+                selected = launcherMode == LauncherMode.FOCUS,
+                enabled = true,
+                onClick = {
+                    launcherMode = LauncherMode.FOCUS
+                    AppSettings.saveLauncherMode(context, LauncherMode.FOCUS)
+                },
+            )
+            RepeatModeButton(
+                title = "Shuffle Launcher",
+                subtitle = "Icon Swapper: all apps show, and Friction reshuffles its home screen after each phone unlock.",
+                selected = launcherMode == LauncherMode.SHUFFLE,
+                enabled = true,
+                onClick = {
+                    launcherMode = LauncherMode.SHUFFLE
+                    AppSettings.saveLauncherMode(context, LauncherMode.SHUFFLE)
+                },
+            )
+            Text(
+                "Set Friction as the default Home app in Android to use this as the actual launcher. Android does not expose icon positions from other launchers.",
+                color = WellnessMuted,
+            )
+            PrimaryButton(onClick = { context.startActivity(defaultHomeSettingsIntent()) }) {
+                Text("Open Default Home settings")
             }
         }
 
@@ -1370,6 +1737,16 @@ private fun loadLaunchableApps(context: Context): List<InstalledApp> {
         .distinctBy { it.packageName }
         .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
 }
+
+private fun launchTargetApp(context: Context, packageName: String) {
+    val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return
+    context.startActivity(
+        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
+}
+
+private fun defaultHomeSettingsIntent(): Intent =
+    Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
 private fun loadTodayUsageForSelectedApps(
     context: Context,
@@ -1470,6 +1847,12 @@ private fun Drawable.toImageBitmap(): ImageBitmap {
     draw(canvas)
     return bitmap.asImageBitmap()
 }
+
+@SuppressLint("MissingPermission")
+private fun loadCurrentWallpaper(context: Context): ImageBitmap? =
+    runCatching {
+        WallpaperManager.getInstance(context).drawable?.toImageBitmap()
+    }.getOrNull()
 
 private fun hasUsageAccess(context: Context): Boolean {
     val appOpsManager = context.getSystemService(AppOpsManager::class.java) ?: return false

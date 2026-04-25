@@ -37,8 +37,8 @@ public final class FrictionChallengeTest {
                 "Reykjavik challenge should accept Iceland in a longer intention"
         );
         assertTrue(
-                FrictionChallenge.isAnswerValid(4, "South America - checking a saved post"),
-                "Andes challenge should accept South America"
+                FrictionChallenge.isAnswerValid(4, "Cannot be a Vel - checking one saved post"),
+                "logic challenge should accept no in a longer intention"
         );
     }
 

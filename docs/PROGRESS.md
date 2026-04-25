@@ -61,3 +61,20 @@
 - Moved Light/Heavy/Ultra mode selection from Settings to Home so it is easier to switch modes.
 - Moved friction status and overlay blocker controls into Settings with permission setup.
 - Ran `./gradlew build`; build passed.
+- Added optional Launcher Mode with a Friction-owned launcher grid.
+- Added a separate icon move-around toggle in Settings and on the Launcher screen.
+- Added a phone-unlock receiver that updates the local launcher shuffle seed when icon move-around is enabled.
+- Target apps opened from the Friction launcher now go through the friction challenge before launch.
+- Fixed the existing challenge test expectation to match the current hard logic prompt.
+- Converted the launcher path into a full-screen home experience when Friction is selected as the Android launcher.
+- Removed Launcher from the normal app bottom navigation so it behaves as a launcher-only Home experience.
+- Added Focus Launcher and Shuffle Launcher profiles.
+- Added explicit Launcher Off mode.
+- Added best-effort current wallpaper rendering behind the Friction launcher grid.
+- Documented that Android does not expose existing launcher icon positions.
+- Added explicit Friction Off mode.
+- Added opt-in Shorts / Reels overlay mode for YouTube Shorts and Instagram Reels heuristic detection.
+- Restored Icon Swapper wording for Shuffle Launcher and added a Default Home settings shortcut.
+- Broadened Shorts/Reels detection to inspect accessibility text, content descriptions, selected/focused state, and known view IDs.
+- Replaced the Shorts/Reels light-style challenge prompt with a custom timed disabled overlay.
+- Moved wallpaper loading off the initial Compose path and throttled Shorts/Reels accessibility scans to reduce lag.

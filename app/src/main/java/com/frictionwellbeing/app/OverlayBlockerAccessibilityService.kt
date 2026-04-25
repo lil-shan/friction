@@ -18,6 +18,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -31,12 +32,18 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
     private var countdownRunnable: Runnable? = null
     private var repeatCheckRunnable: Runnable? = null
     private var currentOverlayPackage: String? = null
+    private var lastShortSurfaceCheckPackage: String? = null
+    private var lastShortSurfaceCheckMillis: Long = 0L
+    private var lastShortSurfaceCheckResult: Boolean = false
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val eventType = event?.eventType ?: return
         if (
             eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-            eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED
+            eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED &&
+            eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+            eventType != AccessibilityEvent.TYPE_VIEW_CLICKED &&
+            eventType != AccessibilityEvent.TYPE_VIEW_SELECTED
         ) {
             return
         }
@@ -66,6 +73,40 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
             return
         }
 
+        val repeatMode = AppSettings.overlayRepeatMode(this)
+        if (repeatMode == OverlayRepeatMode.OFF || !AppSettings.overlayBlockerEnabled(this)) {
+            return
+        }
+
+        if (repeatMode == OverlayRepeatMode.SHORTS_REELS) {
+            val now = System.currentTimeMillis()
+            val lockedUntilMillis = AppSettings.allowedUntilMillis(this, packageName)
+            if (!hasOverlayPermission()) {
+                return
+            }
+            if (lockedUntilMillis > now) {
+                showShortsReelsDisabledOverlay(
+                    packageName = packageName,
+                    appLabel = loadApplicationLabel(packageName),
+                    lockedUntilMillis = lockedUntilMillis,
+                )
+                return
+            }
+            if (isShortsOrReelsSurface(packageName, now)) {
+                val nextLockedUntilMillis = now + AppSettings.allowWindowMillis(
+                    this,
+                    OverlayRepeatMode.SHORTS_REELS,
+                )
+                AppSettings.saveAllowedUntilMillis(this, packageName, nextLockedUntilMillis)
+                showShortsReelsDisabledOverlay(
+                    packageName = packageName,
+                    appLabel = loadApplicationLabel(packageName),
+                    lockedUntilMillis = nextLockedUntilMillis,
+                )
+            }
+            return
+        }
+
         val selectedPackages = AppSettings.selectedPackages(this)
         val isSelectedTarget = packageName in selectedPackages
         if (!isSelectedTarget) {
@@ -87,7 +128,7 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
         val allowedUntilMillis = AppSettings.allowedUntilMillis(this, packageName)
         scheduleRepeatCheckIfNeeded(packageName, allowedUntilMillis, now)
         val shouldShowOverlay = OverlayFrictionEligibility.shouldShowOverlay(
-            AppSettings.overlayBlockerEnabled(this),
+            true,
             true,
             hasOverlayPermission(),
             true,
@@ -119,6 +160,7 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
         val allowWindowMinutes = when (repeatMode) {
             OverlayRepeatMode.LIGHT -> AppSettings.lightModeMinutes(this)
             OverlayRepeatMode.HEAVY -> AppSettings.heavyModeMinutes(this)
+            OverlayRepeatMode.SHORTS_REELS -> AppSettings.heavyModeMinutes(this)
             else -> 0
         }
 
@@ -461,6 +503,139 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun showShortsReelsDisabledOverlay(
+        packageName: String,
+        appLabel: String,
+        lockedUntilMillis: Long,
+    ) {
+        if (!hasOverlayPermission()) {
+            return
+        }
+
+        currentOverlayPackage = packageName
+
+        val countdownText = TextView(this).apply {
+            textSize = 16f
+            setTextColor(ACCENT)
+            gravity = Gravity.CENTER
+            background = roundedDrawable(CHIP_SURFACE, 28f, STROKE, 1)
+            setPadding(22, 14, 22, 14)
+        }
+        val leaveButton = Button(this).apply {
+            text = "Leave app"
+            setTextColor(Color.BLACK)
+            backgroundTintList = ColorStateList.valueOf(ACCENT)
+            setOnClickListener {
+                removeOverlay()
+                if (!performGlobalAction(GLOBAL_ACTION_HOME)) {
+                    startActivity(
+                        Intent(Intent.ACTION_MAIN)
+                            .addCategory(Intent.CATEGORY_HOME)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            }
+        }
+
+        fun refreshDisabledCountdown() {
+            val remainingMillis = (lockedUntilMillis - System.currentTimeMillis()).coerceAtLeast(0L)
+            countdownText.text = if (remainingMillis > 0L) {
+                "Disabled for ${remainingMillis.toDisplayMinutes()} min"
+            } else {
+                "Short-form lock complete"
+            }
+            if (remainingMillis <= 0L) {
+                removeOverlay()
+            }
+        }
+
+        val surfaceLabel = if (packageName == YOUTUBE_PACKAGE) "Shorts" else "Reels"
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(38, 38, 38, 38)
+            background = gradientDrawable(
+                intArrayOf(SURFACE_TOP, SURFACE, SURFACE_BOTTOM),
+                42f,
+                STROKE,
+                2,
+            )
+            addView(TextView(context).apply {
+                text = "SHORT-FORM DISABLED"
+                textSize = 12f
+                letterSpacing = 0.12f
+                setTextColor(ACCENT)
+                gravity = Gravity.CENTER
+            })
+            addView(TextView(context).apply {
+                text = "$surfaceLabel is off\nfor now"
+                textSize = 28f
+                setTextColor(TEXT_PRIMARY)
+                gravity = Gravity.CENTER
+            })
+            addView(TextView(context).apply {
+                text = "$appLabel can stay available, but this short-video tab is locked until the timer ends."
+                textSize = 18f
+                setTextColor(TEXT_PRIMARY)
+                gravity = Gravity.CENTER
+                setPadding(0, 22, 0, 18)
+            })
+            addView(countdownText, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ))
+            addView(leaveButton, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                setMargins(0, 22, 0, 0)
+            })
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(48, 48, 48, 48)
+            background = gradientDrawable(
+                intArrayOf(Color.rgb(0, 0, 0), Color.rgb(12, 12, 12)),
+                0f,
+                Color.TRANSPARENT,
+                0,
+            )
+            addView(panel, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ))
+        }
+
+        val layoutParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.CENTER
+        }
+
+        runCatching {
+            windowManager.addView(content, layoutParams)
+            overlayView = content
+            refreshDisabledCountdown()
+            countdownRunnable = object : Runnable {
+                override fun run() {
+                    refreshDisabledCountdown()
+                    if (overlayView != null) {
+                        handler.postDelayed(this, 1000L)
+                    }
+                }
+            }
+            handler.postDelayed(countdownRunnable!!, 1000L)
+        }.onFailure {
+            currentOverlayPackage = null
+        }
+    }
+
     private fun startCountdown(onTick: (Int) -> Unit) {
         var remainingSeconds = FrictionStateCalculator.COUNTDOWN_SECONDS
         countdownRunnable = object : Runnable {
@@ -558,6 +733,77 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
         return applicationInfo?.loadLabel(packageManager)?.toString() ?: packageName
     }
 
+    private fun isShortsOrReelsSurface(packageName: String, nowMillis: Long): Boolean {
+        if (packageName != YOUTUBE_PACKAGE && packageName != INSTAGRAM_PACKAGE) {
+            return false
+        }
+
+        if (
+            packageName == lastShortSurfaceCheckPackage &&
+            nowMillis - lastShortSurfaceCheckMillis < SHORT_SURFACE_CHECK_THROTTLE_MILLIS
+        ) {
+            return lastShortSurfaceCheckResult
+        }
+
+        val root = rootInActiveWindow ?: return false
+        val signals = collectAccessibilitySignals(root)
+        val result = if (packageName == YOUTUBE_PACKAGE) {
+            signals.any { signal ->
+                signal.value.contains("shorts", ignoreCase = true) &&
+                    (signal.selected || signal.focused || signal.value.contains("watch", ignoreCase = true))
+            }
+        } else {
+            signals.any { signal ->
+                val value = signal.value
+                val selectedReelsTab = value.equals("reels", ignoreCase = true) &&
+                    (signal.selected || signal.focused)
+                selectedReelsTab ||
+                    value.contains("instagram reels", ignoreCase = true) ||
+                    value.contains("clips_viewer", ignoreCase = true) ||
+                    value.contains("reels_viewer", ignoreCase = true)
+            }
+        }
+        lastShortSurfaceCheckPackage = packageName
+        lastShortSurfaceCheckMillis = nowMillis
+        lastShortSurfaceCheckResult = result
+        return result
+    }
+
+    private fun collectAccessibilitySignals(root: AccessibilityNodeInfo): List<AccessibilitySignal> {
+        val values = mutableListOf<AccessibilitySignal>()
+        fun visit(node: AccessibilityNodeInfo?, depth: Int) {
+            if (node == null || depth > 7 || values.size > 48) {
+                return
+            }
+            fun add(value: CharSequence?) {
+                value?.toString()?.takeIf { it.isNotBlank() }?.let { text ->
+                    values.add(
+                        AccessibilitySignal(
+                            value = text,
+                            selected = node.isSelected,
+                            focused = node.isFocused || node.isAccessibilityFocused,
+                        ),
+                    )
+                }
+            }
+            add(node.text)
+            add(node.contentDescription)
+            add(node.viewIdResourceName)
+            add(node.className)
+            for (index in 0 until node.childCount) {
+                visit(node.getChild(index), depth + 1)
+            }
+        }
+        visit(root, 0)
+        return values
+    }
+
+    private data class AccessibilitySignal(
+        val value: String,
+        val selected: Boolean,
+        val focused: Boolean,
+    )
+
     private fun hasOverlayPermission(): Boolean =
         android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M ||
             Settings.canDrawOverlays(this)
@@ -590,6 +836,7 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val MILLIS_PER_MINUTE = 60L * 1000L
+        private const val SHORT_SURFACE_CHECK_THROTTLE_MILLIS = 750L
         private val ACCENT = Color.rgb(255, 216, 77)
         private val SURFACE_TOP = Color.rgb(28, 28, 28)
         private val SURFACE = Color.rgb(14, 14, 14)
@@ -600,6 +847,7 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
         private val TEXT_PRIMARY = Color.rgb(248, 248, 242)
         private val TEXT_MUTED = Color.rgb(183, 183, 176)
         const val INSTAGRAM_PACKAGE = "com.instagram.android"
+        const val YOUTUBE_PACKAGE = "com.google.android.youtube"
 
         @Volatile
         var lastForegroundPackage: String? = null

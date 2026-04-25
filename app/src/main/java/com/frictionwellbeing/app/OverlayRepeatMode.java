@@ -1,9 +1,11 @@
 package com.frictionwellbeing.app;
 
 public final class OverlayRepeatMode {
+    public static final String OFF = "off";
     public static final String LIGHT = "light";
     public static final String HEAVY = "heavy";
     public static final String ULTRA_FOCUS = "ultra_focus";
+    public static final String SHORTS_REELS = "shorts_reels";
 
     public static final int DEFAULT_LIGHT_MINUTES = 10;
     public static final int DEFAULT_HEAVY_MINUTES = 2;
@@ -18,7 +20,7 @@ public final class OverlayRepeatMode {
     }
 
     public static long allowWindowMillis(String mode) {
-        if (ULTRA_FOCUS.equals(mode)) {
+        if (OFF.equals(mode) || ULTRA_FOCUS.equals(mode)) {
             return 0L;
         }
         if (LIGHT.equals(mode)) {

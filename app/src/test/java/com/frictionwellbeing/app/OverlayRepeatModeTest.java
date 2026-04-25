@@ -4,6 +4,8 @@ public final class OverlayRepeatModeTest {
     public static void main(String[] args) {
         lightModeUsesLongerAllowance();
         heavyModeUsesTwoMinuteAllowance();
+        shortsReelsUsesHeavyAllowance();
+        offModeDoesNotGrantAllowance();
         ultraFocusDoesNotGrantAllowance();
         convertsMinutesToMillis();
     }
@@ -21,6 +23,22 @@ public final class OverlayRepeatModeTest {
                 2L * 60L * 1000L,
                 OverlayRepeatMode.allowWindowMillis(OverlayRepeatMode.HEAVY),
                 "heavy mode should repeat every two minutes"
+        );
+    }
+
+    private static void shortsReelsUsesHeavyAllowance() {
+        assertEquals(
+                2L * 60L * 1000L,
+                OverlayRepeatMode.allowWindowMillis(OverlayRepeatMode.SHORTS_REELS),
+                "shorts/reels mode should use the heavy repeat window"
+        );
+    }
+
+    private static void offModeDoesNotGrantAllowance() {
+        assertEquals(
+                0L,
+                OverlayRepeatMode.allowWindowMillis(OverlayRepeatMode.OFF),
+                "off mode should not grant an app-opening allowance"
         );
     }
 

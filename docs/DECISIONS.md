@@ -33,3 +33,12 @@
 - Use challenge-style friction copy for the overlay instead of a plain intention prompt. Continue requires the countdown to finish and the input to include the expected challenge answer.
 - Add overlay repeat modes instead of one fixed cooldown: Light repeats after 10 minutes, Heavy repeats after 2 minutes, and Ultra Focus starts a timed 25-minute target-app lock.
 - While Ultra Focus is active, the app disables its overlay mode controls until the timer ends. Users can still use Android system-level controls outside the app.
+- Implement icon move-around as a separate Launcher Mode toggle, not as part of Light/Heavy/Ultra Focus.
+- Use an Android home intent filter so Friction can be selected as a launcher, while keeping the normal launcher app entry.
+- Shuffle only Friction's own launcher grid by storing a local shuffle seed on phone unlock. Do not try to alter icons on the user's existing launcher.
+- Split Launcher Mode into Focus Launcher and Shuffle Launcher. Focus Launcher hides selected distraction targets; Shuffle Launcher shows all launchable apps and changes their order after unlock.
+- Add Launcher Off as the default launcher profile so selecting Friction as Home does not automatically hide or shuffle icons.
+- Add Friction Off as the default overlay mode so overlay friction is explicit opt-in.
+- Add Shorts / Reels as a separate overlay friction mode because it needs accessibility window-content retrieval and should not be bundled with package-level selected-app blocking.
+- Use the current wallpaper as a best-effort visual background, with a dark fallback when Android does not expose the wallpaper drawable.
+- Do not attempt to retrieve icon positions from other launchers because Android does not provide a public API for that layout data.
