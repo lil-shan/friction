@@ -1,5 +1,10 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Usage Access is granted manually through Android Settings/AppOps; declaring
+         PACKAGE_USAGE_STATS makes the app's UsageStatsManager intent explicit. -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
 
     <queries>
         <intent>

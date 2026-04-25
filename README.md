@@ -11,6 +11,8 @@ Friction Wellbeing is a native Android wellbeing app. The initial MVP lets a use
 - Local-only settings with `SharedPreferences`.
 - Installed launchable app list from `PackageManager`.
 - Usage Access explanation screen with a button to open Android settings.
+- Dashboard usage totals for selected apps when Usage Access is granted.
+- Below-limit / at-or-over daily limit status against the configured daily limit.
 
 ## Build
 

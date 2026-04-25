@@ -1,3 +1,6 @@
+import org.gradle.api.tasks.JavaExec
+import org.gradle.api.tasks.compile.JavaCompile
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -40,4 +43,27 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+}
+
+val usageLimitUnitTestClasses = layout.buildDirectory.dir("usageLimitUnitTest/classes")
+
+tasks.register<JavaCompile>("compileUsageLimitUnitTest") {
+    source(
+        "src/main/java/com/frictionwellbeing/app/UsageLimitCalculator.java",
+        "src/test/java/com/frictionwellbeing/app/UsageLimitCalculatorTest.java",
+    )
+    classpath = files()
+    destinationDirectory.set(usageLimitUnitTestClasses)
+    sourceCompatibility = "17"
+    targetCompatibility = "17"
+}
+
+tasks.register<JavaExec>("runUsageLimitUnitTest") {
+    dependsOn("compileUsageLimitUnitTest")
+    classpath = files(usageLimitUnitTestClasses)
+    mainClass.set("com.frictionwellbeing.app.UsageLimitCalculatorTest")
+}
+
+tasks.named("check") {
+    dependsOn("runUsageLimitUnitTest")
 }

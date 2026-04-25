@@ -17,3 +17,12 @@
 - Second build failed because no Android SDK location is configured. Gradle requires `ANDROID_HOME` or `sdk.dir` in `local.properties`.
 - Reviewed the uncommitted MVP changes and found no implementation issue requiring changes before the first commit.
 - Re-ran `./gradlew build`; it still fails because no Android SDK location is configured.
+- Added UsageStatsManager-based reading for today's selected-app foreground usage.
+- Updated the dashboard to show selected-app usage minutes, total minutes, and below-limit / at-or-over daily limit status.
+- Added graceful dashboard handling for the permission-denied state with a path to the Usage Access screen.
+- Added dependency-free usage limit logic in `UsageLimitCalculator` and a plain Java test runner wired into Gradle `check`.
+- Verified the usage limit test directly with `javac` and `java` because the Android build cannot configure without an SDK.
+- Re-ran `./gradlew build`; it still fails before compilation because no Android SDK location is configured.
+- Installed Android command-line tools and SDK packages under `~/Android/Sdk`, then added local `sdk.dir` in untracked `local.properties`.
+- Applied safe review fixes: targeted `PACKAGE_USAGE_STATS` lint suppression, privacy wording, at-or-over limit wording, `HorizontalDivider`, and `mutableIntStateOf`.
+- Ran `./gradlew build`; build passed with lint and the temporary usage limit test.

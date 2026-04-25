@@ -1,6 +1,7 @@
 package com.frictionwellbeing.app
 
 import android.app.AppOpsManager
+import android.app.usage.UsageStats
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
@@ -33,7 +34,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -48,6 +49,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,6 +63,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.Calendar
+import kotlin.math.ceil
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,6 +91,22 @@ private data class InstalledApp(
     val packageName: String,
     val icon: ImageBitmap?,
 )
+
+private data class SelectedAppUsage(
+    val label: String,
+    val packageName: String,
+    val todayUsageMinutes: Int,
+)
+
+private sealed interface DashboardUsageState {
+    data object Empty : DashboardUsageState
+    data object Loading : DashboardUsageState
+    data object PermissionDenied : DashboardUsageState
+    data class Loaded(
+        val apps: List<SelectedAppUsage>,
+        val summary: UsageLimitCalculator.Result,
+    ) : DashboardUsageState
+}
 
 private class FrictionPreferences(context: Context) {
     private val preferences: SharedPreferences =
@@ -118,7 +138,7 @@ private class FrictionPreferences(context: Context) {
 private fun FrictionApp(preferences: FrictionPreferences) {
     var screen by remember { mutableStateOf(Screen.Dashboard) }
     var selectedPackages by remember { mutableStateOf(preferences.selectedPackages()) }
-    var dailyLimitMinutes by remember { mutableStateOf(preferences.dailyLimitMinutes()) }
+    var dailyLimitMinutes by remember { mutableIntStateOf(preferences.dailyLimitMinutes()) }
 
     MaterialTheme(
         colorScheme = lightColorScheme(
@@ -158,6 +178,7 @@ private fun FrictionApp(preferences: FrictionPreferences) {
                             dailyLimitMinutes = dailyLimitMinutes,
                             onChooseApps = { screen = Screen.Apps },
                             onOpenSettings = { screen = Screen.Settings },
+                            onOpenUsageAccess = { screen = Screen.UsageAccess },
                         )
 
                         Screen.Apps -> AppSelectionScreen(
@@ -190,7 +211,32 @@ private fun DashboardScreen(
     dailyLimitMinutes: Int,
     onChooseApps: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenUsageAccess: () -> Unit,
 ) {
+    val context = LocalContext.current
+    var refreshCount by remember { mutableIntStateOf(0) }
+    var usageState by remember { mutableStateOf<DashboardUsageState>(DashboardUsageState.Loading) }
+
+    LaunchedEffect(selectedPackages, dailyLimitMinutes, refreshCount) {
+        usageState = when {
+            selectedPackages.isEmpty() -> DashboardUsageState.Empty
+            !hasUsageAccess(context) -> DashboardUsageState.PermissionDenied
+            else -> withContext(Dispatchers.IO) {
+                val selectedUsage = loadTodayUsageForSelectedApps(context, selectedPackages)
+                val usageMinutesByPackage = selectedUsage.associate {
+                    it.packageName to it.todayUsageMinutes
+                }
+                val summary = UsageLimitCalculator.summarize(
+                    selectedPackages,
+                    usageMinutesByPackage,
+                    dailyLimitMinutes,
+                    true,
+                )
+                DashboardUsageState.Loaded(selectedUsage, summary)
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -210,15 +256,48 @@ private fun DashboardScreen(
             style = MaterialTheme.typography.titleMedium,
         )
 
-        if (selectedPackages.isEmpty()) {
-            Text("No apps selected yet.")
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.weight(1f),
-            ) {
-                items(selectedPackages.sorted()) { packageName ->
-                    Text(packageName, style = MaterialTheme.typography.bodyMedium)
+        when (val state = usageState) {
+            DashboardUsageState.Empty -> Text("No apps selected yet.")
+            DashboardUsageState.Loading -> Text("Loading today's usage...")
+            DashboardUsageState.PermissionDenied -> {
+                Text(
+                    text = "Usage Access is required to show today's selected-app usage.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Button(onClick = onOpenUsageAccess) {
+                    Text("Review Usage Access")
+                }
+            }
+
+            is DashboardUsageState.Loaded -> {
+                Text(
+                    text = "${state.summary.totalUsageMinutes} of ${state.summary.dailyLimitMinutes} minutes used today",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = state.summary.status.dashboardLabel(),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    items(state.apps, key = { it.packageName }) { app ->
+                        Column {
+                            Text(
+                                text = app.label,
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = "${app.todayUsageMinutes} min today - ${app.packageName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -229,6 +308,9 @@ private fun DashboardScreen(
             }
             TextButton(onClick = onOpenSettings) {
                 Text("Edit limit")
+            }
+            TextButton(onClick = { refreshCount += 1 }) {
+                Text("Refresh")
             }
         }
     }
@@ -279,7 +361,7 @@ private fun AppSelectionScreen(
                             onSelectionChanged(nextSelection)
                         },
                     )
-                    Divider()
+                    HorizontalDivider()
                 }
             }
         }
@@ -355,7 +437,7 @@ private fun UsageAccessScreen() {
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
-            text = "Friction Wellbeing will need Usage Access later to understand foreground app usage. This MVP only explains and opens the Android settings screen; it does not enforce limits yet.",
+            text = "Friction Wellbeing uses Usage Access to show today's foreground usage for selected apps. This MVP shows usage and limit status; it does not enforce limits yet.",
             style = MaterialTheme.typography.bodyMedium,
         )
         Button(
@@ -430,6 +512,82 @@ private fun loadLaunchableApps(context: Context): List<InstalledApp> {
         .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
 }
 
+private fun loadTodayUsageForSelectedApps(
+    context: Context,
+    selectedPackages: Set<String>,
+): List<SelectedAppUsage> {
+    val packageManager = context.packageManager
+    val usageMinutesByPackage = queryTodayUsageMinutes(context, selectedPackages)
+    return selectedPackages
+        .sorted()
+        .map { packageName ->
+            SelectedAppUsage(
+                label = loadApplicationLabel(packageManager, packageName),
+                packageName = packageName,
+                todayUsageMinutes = usageMinutesByPackage[packageName] ?: 0,
+            )
+        }
+}
+
+private fun queryTodayUsageMinutes(
+    context: Context,
+    selectedPackages: Set<String>,
+): Map<String, Int> {
+    if (selectedPackages.isEmpty()) {
+        return emptyMap()
+    }
+
+    val usageStatsManager =
+        context.getSystemService(UsageStatsManager::class.java) ?: return emptyMap()
+    val now = System.currentTimeMillis()
+    val startOfDay = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    val usageStats = usageStatsManager.queryUsageStats(
+        UsageStatsManager.INTERVAL_DAILY,
+        startOfDay,
+        now,
+    ) ?: emptyList()
+
+    return usageStats
+        .filter { it.packageName in selectedPackages }
+        .usageMillisByPackage()
+        .mapValues { (_, usageMillis) -> usageMillis.toDisplayMinutes() }
+}
+
+private fun List<UsageStats>.usageMillisByPackage(): Map<String, Long> {
+    val usageByPackage = mutableMapOf<String, Long>()
+    forEach { usageStats ->
+        usageByPackage[usageStats.packageName] =
+            usageByPackage.getOrDefault(usageStats.packageName, 0L) +
+                usageStats.totalTimeInForeground
+    }
+    return usageByPackage
+}
+
+private fun loadApplicationLabel(
+    packageManager: PackageManager,
+    packageName: String,
+): String {
+    val applicationInfo = runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getApplicationInfo(
+                packageName,
+                PackageManager.ApplicationInfoFlags.of(0),
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getApplicationInfo(packageName, 0)
+        }
+    }.getOrNull()
+
+    return applicationInfo?.loadLabel(packageManager)?.toString() ?: packageName
+}
+
 private fun queryLaunchableActivities(
     packageManager: PackageManager,
     intent: Intent,
@@ -455,7 +613,7 @@ private fun Drawable.toImageBitmap(): ImageBitmap {
 }
 
 private fun hasUsageAccess(context: Context): Boolean {
-    val appOpsManager = context.getSystemService(AppOpsManager::class.java)
+    val appOpsManager = context.getSystemService(AppOpsManager::class.java) ?: return false
     val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         appOpsManager.unsafeCheckOpNoThrow(
             AppOpsManager.OPSTR_GET_USAGE_STATS,
@@ -471,18 +629,22 @@ private fun hasUsageAccess(context: Context): Boolean {
         )
     }
 
-    if (mode != AppOpsManager.MODE_ALLOWED) {
-        return false
-    }
-
-    val usageStatsManager = context.getSystemService(UsageStatsManager::class.java)
-    val now = System.currentTimeMillis()
-    val recentStats = usageStatsManager.queryUsageStats(
-        UsageStatsManager.INTERVAL_DAILY,
-        now - ONE_DAY_MILLIS,
-        now,
-    )
-    return recentStats.isNotEmpty()
+    return mode == AppOpsManager.MODE_ALLOWED
 }
 
-private const val ONE_DAY_MILLIS = 24L * 60L * 60L * 1000L
+private fun Long.toDisplayMinutes(): Int {
+    if (this <= 0L) {
+        return 0
+    }
+    return ceil(this / MILLIS_PER_MINUTE.toDouble()).toInt()
+}
+
+private fun UsageLimitCalculator.Status.dashboardLabel(): String =
+    when (this) {
+        UsageLimitCalculator.Status.NO_APPS_SELECTED -> "No apps selected"
+        UsageLimitCalculator.Status.PERMISSION_REQUIRED -> "Usage Access required"
+        UsageLimitCalculator.Status.BELOW_LIMIT -> "Below daily limit"
+        UsageLimitCalculator.Status.OVER_LIMIT -> "At or over daily limit"
+    }
+
+private const val MILLIS_PER_MINUTE = 60L * 1000L
