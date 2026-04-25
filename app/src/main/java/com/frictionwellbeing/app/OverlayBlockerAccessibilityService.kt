@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -28,6 +29,7 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private var overlayView: View? = null
     private var countdownRunnable: Runnable? = null
+    private var repeatCheckRunnable: Runnable? = null
     private var currentOverlayPackage: String? = null
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -53,6 +55,8 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        repeatCheckRunnable?.let(handler::removeCallbacks)
+        repeatCheckRunnable = null
         removeOverlay()
         super.onDestroy()
     }
@@ -64,15 +68,30 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
 
         val selectedPackages = AppSettings.selectedPackages(this)
         val isSelectedTarget = packageName in selectedPackages
+        if (!isSelectedTarget) {
+            return
+        }
+
         val now = System.currentTimeMillis()
+        if (AppSettings.ultraFocusActive(this, now)) {
+            showUltraFocusOverlay(
+                packageName = packageName,
+                appLabel = loadApplicationLabel(packageName),
+                focusUntilMillis = AppSettings.ultraFocusUntilMillis(this),
+            )
+            return
+        }
+
         val dailyLimitMinutes = AppSettings.dailyLimitMinutes(this)
         val todayUsageMinutes = queryTodayUsageMinutes(packageName)
+        val allowedUntilMillis = AppSettings.allowedUntilMillis(this, packageName)
+        scheduleRepeatCheckIfNeeded(packageName, allowedUntilMillis, now)
         val shouldShowOverlay = OverlayFrictionEligibility.shouldShowOverlay(
             AppSettings.overlayBlockerEnabled(this),
             true,
             hasOverlayPermission(),
-            isSelectedTarget,
-            AppSettings.allowedUntilMillis(this, packageName),
+            true,
+            allowedUntilMillis,
             now,
             todayUsageMinutes,
             dailyLimitMinutes,
@@ -94,39 +113,49 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
 
         currentOverlayPackage = packageName
         var remainingSeconds = FrictionStateCalculator.COUNTDOWN_SECONDS
+        val repeatMode = AppSettings.overlayRepeatMode(this)
         val challengeIndex = FrictionChallenge.indexFor(packageName, System.currentTimeMillis())
-        val challengeText = FrictionChallenge.promptFor(challengeIndex)
-        val challengeAnswer = FrictionChallenge.expectedAnswerFor(challengeIndex)
+        val challengeText = FrictionChallenge.promptFor(challengeIndex, repeatMode)
+        val allowWindowMinutes = when (repeatMode) {
+            OverlayRepeatMode.LIGHT -> AppSettings.lightModeMinutes(this)
+            OverlayRepeatMode.HEAVY -> AppSettings.heavyModeMinutes(this)
+            else -> 0
+        }
 
         val countdownText = TextView(this).apply {
             text = "Gate opens in $remainingSeconds seconds"
-            textSize = 18f
+            textSize = 16f
             setTextColor(ACCENT)
             gravity = Gravity.CENTER
+            background = roundedDrawable(CHIP_SURFACE, 28f, STROKE, 1)
+            setPadding(22, 14, 22, 14)
         }
         val answerText = TextView(this).apply {
             text = "Answer required"
             textSize = 13f
             setTextColor(TEXT_MUTED)
             gravity = Gravity.CENTER
+            background = roundedDrawable(CHIP_SURFACE, 28f, STROKE, 1)
+            setPadding(22, 14, 22, 14)
         }
         val intentionInput = EditText(this).apply {
             hint = "Answer + why you want to continue"
             minLines = 3
             setTextColor(TEXT_PRIMARY)
             setHintTextColor(TEXT_MUTED)
-            background = roundedDrawable(SURFACE_RAISED, 18f, STROKE, 2)
-            setPadding(24, 18, 24, 18)
+            background = roundedDrawable(SURFACE_RAISED, 26f, STROKE, 2)
+            setPadding(28, 22, 28, 22)
         }
         val continueButton = Button(this).apply {
-            text = "Continue for 2 minutes"
+            text = "Continue for $allowWindowMinutes min"
             isEnabled = false
-            setTextColor(Color.rgb(6, 35, 28))
+            setTextColor(Color.BLACK)
+            backgroundTintList = ColorStateList.valueOf(ACCENT)
         }
 
         fun refreshContinueState() {
             val input = intentionInput.text?.toString().orEmpty()
-            val answerValid = FrictionChallenge.isAnswerValid(challengeIndex, input)
+            val answerValid = FrictionChallenge.isAnswerValid(challengeIndex, input, repeatMode)
             continueButton.isEnabled = answerValid && FrictionStateCalculator.canContinue(
                 remainingSeconds,
                 input,
@@ -141,7 +170,7 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
             answerText.text = if (answerValid) {
                 "Answer accepted"
             } else {
-                "Include the correct answer: $challengeAnswer"
+                "Correct answer required"
             }
             answerText.setTextColor(if (answerValid) ACCENT else TEXT_MUTED)
         }
@@ -149,6 +178,7 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
         val leaveButton = Button(this).apply {
             text = "Leave now"
             setTextColor(TEXT_PRIMARY)
+            backgroundTintList = ColorStateList.valueOf(CHIP_SURFACE)
             setOnClickListener {
                 removeOverlay()
                 if (!performGlobalAction(GLOBAL_ACTION_HOME)) {
@@ -162,11 +192,17 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
         }
 
         continueButton.setOnClickListener {
+            val nowMillis = System.currentTimeMillis()
+            val allowedUntilMillis = OverlayFrictionEligibility.allowedUntil(
+                nowMillis,
+                AppSettings.allowWindowMillis(this, AppSettings.overlayRepeatMode(this)),
+            )
             AppSettings.saveAllowedUntilMillis(
                 this,
                 packageName,
-                OverlayFrictionEligibility.allowedUntil(System.currentTimeMillis()),
+                allowedUntilMillis,
             )
+            scheduleRepeatCheckIfNeeded(packageName, allowedUntilMillis, nowMillis)
             removeOverlay()
         }
 
@@ -182,8 +218,13 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(34, 34, 34, 34)
-            background = roundedDrawable(SURFACE, 34f, STROKE, 2)
+            setPadding(38, 38, 38, 38)
+            background = gradientDrawable(
+                intArrayOf(SURFACE_TOP, SURFACE, SURFACE_BOTTOM),
+                42f,
+                STROKE,
+                2,
+            )
             addView(TextView(context).apply {
                 text = "FRICTION CHECK"
                 textSize = 12f
@@ -192,8 +233,8 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
                 gravity = Gravity.CENTER
             })
             addView(TextView(context).apply {
-                text = "Pause before $appLabel"
-                textSize = 26f
+                text = "Pause before\n$appLabel"
+                textSize = 28f
                 setTextColor(TEXT_PRIMARY)
                 gravity = Gravity.CENTER
             })
@@ -210,8 +251,27 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
                 gravity = Gravity.CENTER
                 setPadding(0, 26, 0, 22)
             })
-            addView(countdownText)
-            addView(answerText)
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                addView(countdownText, LinearLayout.LayoutParams(
+                    0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f,
+                ).apply {
+                    setMargins(0, 0, 8, 0)
+                })
+                addView(answerText, LinearLayout.LayoutParams(
+                    0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f,
+                ).apply {
+                    setMargins(8, 0, 0, 0)
+                })
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ))
             addView(intentionInput, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -234,7 +294,12 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(48, 48, 48, 48)
-            setBackgroundColor(Color.argb(244, 5, 8, 13))
+            background = gradientDrawable(
+                intArrayOf(Color.rgb(0, 0, 0), Color.rgb(12, 12, 12)),
+                0f,
+                Color.TRANSPARENT,
+                0,
+            )
             addView(panel, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -259,6 +324,138 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
                 remainingSeconds = seconds
                 refreshContinueState()
             }
+        }.onFailure {
+            currentOverlayPackage = null
+        }
+    }
+
+    private fun showUltraFocusOverlay(
+        packageName: String,
+        appLabel: String,
+        focusUntilMillis: Long,
+    ) {
+        if (!hasOverlayPermission()) {
+            return
+        }
+
+        currentOverlayPackage = packageName
+
+        val countdownText = TextView(this).apply {
+            textSize = 16f
+            setTextColor(ACCENT)
+            gravity = Gravity.CENTER
+            background = roundedDrawable(CHIP_SURFACE, 28f, STROKE, 1)
+            setPadding(22, 14, 22, 14)
+        }
+        val leaveButton = Button(this).apply {
+            text = "Leave app"
+            setTextColor(Color.BLACK)
+            backgroundTintList = ColorStateList.valueOf(ACCENT)
+            setOnClickListener {
+                removeOverlay()
+                if (!performGlobalAction(GLOBAL_ACTION_HOME)) {
+                    startActivity(
+                        Intent(Intent.ACTION_MAIN)
+                            .addCategory(Intent.CATEGORY_HOME)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            }
+        }
+
+        fun refreshFocusCountdown() {
+            val remainingMillis = (focusUntilMillis - System.currentTimeMillis()).coerceAtLeast(0L)
+            countdownText.text = if (remainingMillis > 0L) {
+                "Locked for ${remainingMillis.toDisplayMinutes()} min"
+            } else {
+                "Focus window complete"
+            }
+            if (remainingMillis <= 0L) {
+                removeOverlay()
+            }
+        }
+
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(38, 38, 38, 38)
+            background = gradientDrawable(
+                intArrayOf(SURFACE_TOP, SURFACE, SURFACE_BOTTOM),
+                42f,
+                STROKE,
+                2,
+            )
+            addView(TextView(context).apply {
+                text = "ULTRA FOCUS"
+                textSize = 12f
+                letterSpacing = 0.12f
+                setTextColor(ACCENT)
+                gravity = Gravity.CENTER
+            })
+            addView(TextView(context).apply {
+                text = "Do not open\n$appLabel"
+                textSize = 28f
+                setTextColor(TEXT_PRIMARY)
+                gravity = Gravity.CENTER
+            })
+            addView(TextView(context).apply {
+                text = "This target app is unavailable until your focus timer ends."
+                textSize = 18f
+                setTextColor(TEXT_PRIMARY)
+                gravity = Gravity.CENTER
+                setPadding(0, 22, 0, 18)
+            })
+            addView(countdownText, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ))
+            addView(leaveButton, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                setMargins(0, 22, 0, 0)
+            })
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(48, 48, 48, 48)
+            background = gradientDrawable(
+                intArrayOf(Color.rgb(0, 0, 0), Color.rgb(12, 12, 12)),
+                0f,
+                Color.TRANSPARENT,
+                0,
+            )
+            addView(panel, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ))
+        }
+
+        val layoutParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.CENTER
+        }
+
+        runCatching {
+            windowManager.addView(content, layoutParams)
+            overlayView = content
+            refreshFocusCountdown()
+            countdownRunnable = object : Runnable {
+                override fun run() {
+                    refreshFocusCountdown()
+                    if (overlayView != null) {
+                        handler.postDelayed(this, 1000L)
+                    }
+                }
+            }
+            handler.postDelayed(countdownRunnable!!, 1000L)
         }.onFailure {
             currentOverlayPackage = null
         }
@@ -290,6 +487,28 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
         currentOverlayPackage = null
     }
 
+    private fun scheduleRepeatCheckIfNeeded(
+        packageName: String,
+        allowedUntilMillis: Long,
+        nowMillis: Long,
+    ) {
+        repeatCheckRunnable?.let(handler::removeCallbacks)
+        repeatCheckRunnable = null
+        if (allowedUntilMillis <= nowMillis) {
+            return
+        }
+        repeatCheckRunnable = Runnable {
+            repeatCheckRunnable = null
+            if (lastForegroundPackage == packageName) {
+                maybeShowFrictionOverlay(packageName)
+            }
+        }
+        handler.postDelayed(
+            repeatCheckRunnable!!,
+            (allowedUntilMillis - nowMillis).coerceAtLeast(1000L),
+        )
+    }
+
     private fun queryTodayUsageMinutes(packageName: String): Int {
         val usageStatsManager =
             getSystemService(UsageStatsManager::class.java) ?: return 0
@@ -314,6 +533,13 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
             return 0
         }
         return ceil(usageMillis / MILLIS_PER_MINUTE.toDouble()).toInt()
+    }
+
+    private fun Long.toDisplayMinutes(): Int {
+        if (this <= 0L) {
+            return 0
+        }
+        return ceil(this / MILLIS_PER_MINUTE.toDouble()).toInt()
     }
 
     private fun loadApplicationLabel(packageName: String): String {
@@ -348,17 +574,31 @@ class OverlayBlockerAccessibilityService : AccessibilityService() {
             setStroke(strokeWidth, strokeColor)
         }
 
+    private fun gradientDrawable(
+        colors: IntArray,
+        radius: Float,
+        strokeColor: Int,
+        strokeWidth: Int,
+    ): GradientDrawable =
+        GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, colors).apply {
+            cornerRadius = radius
+            setStroke(strokeWidth, strokeColor)
+        }
+
     private val windowManager: WindowManager
         get() = getSystemService(WindowManager::class.java)
 
     companion object {
         private const val MILLIS_PER_MINUTE = 60L * 1000L
-        private val ACCENT = Color.rgb(72, 224, 184)
-        private val SURFACE = Color.rgb(18, 25, 34)
-        private val SURFACE_RAISED = Color.rgb(26, 36, 48)
-        private val STROKE = Color.rgb(52, 67, 84)
-        private val TEXT_PRIMARY = Color.rgb(232, 238, 245)
-        private val TEXT_MUTED = Color.rgb(154, 166, 180)
+        private val ACCENT = Color.rgb(255, 216, 77)
+        private val SURFACE_TOP = Color.rgb(28, 28, 28)
+        private val SURFACE = Color.rgb(14, 14, 14)
+        private val SURFACE_BOTTOM = Color.rgb(0, 0, 0)
+        private val SURFACE_RAISED = Color.rgb(24, 24, 24)
+        private val CHIP_SURFACE = Color.rgb(31, 31, 31)
+        private val STROKE = Color.rgb(58, 58, 58)
+        private val TEXT_PRIMARY = Color.rgb(248, 248, 242)
+        private val TEXT_MUTED = Color.rgb(183, 183, 176)
         const val INSTAGRAM_PACKAGE = "com.instagram.android"
 
         @Volatile

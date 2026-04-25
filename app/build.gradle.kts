@@ -52,10 +52,12 @@ tasks.register<JavaCompile>("compileUsageLimitUnitTest") {
         "src/main/java/com/frictionwellbeing/app/FrictionStateCalculator.java",
         "src/main/java/com/frictionwellbeing/app/FrictionChallenge.java",
         "src/main/java/com/frictionwellbeing/app/OverlayFrictionEligibility.java",
+        "src/main/java/com/frictionwellbeing/app/OverlayRepeatMode.java",
         "src/main/java/com/frictionwellbeing/app/UsageLimitCalculator.java",
         "src/test/java/com/frictionwellbeing/app/FrictionChallengeTest.java",
         "src/test/java/com/frictionwellbeing/app/FrictionStateCalculatorTest.java",
         "src/test/java/com/frictionwellbeing/app/OverlayFrictionEligibilityTest.java",
+        "src/test/java/com/frictionwellbeing/app/OverlayRepeatModeTest.java",
         "src/test/java/com/frictionwellbeing/app/UsageLimitCalculatorTest.java",
     )
     classpath = files()
@@ -88,9 +90,16 @@ tasks.register<JavaExec>("runOverlayFrictionEligibilityTest") {
     mainClass.set("com.frictionwellbeing.app.OverlayFrictionEligibilityTest")
 }
 
+tasks.register<JavaExec>("runOverlayRepeatModeTest") {
+    dependsOn("compileUsageLimitUnitTest")
+    classpath = files(usageLimitUnitTestClasses)
+    mainClass.set("com.frictionwellbeing.app.OverlayRepeatModeTest")
+}
+
 tasks.named("check") {
     dependsOn("runUsageLimitUnitTest")
     dependsOn("runFrictionChallengeTest")
     dependsOn("runFrictionStateUnitTest")
     dependsOn("runOverlayFrictionEligibilityTest")
+    dependsOn("runOverlayRepeatModeTest")
 }

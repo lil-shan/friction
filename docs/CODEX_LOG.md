@@ -302,3 +302,129 @@ Update the friction overlay toward the expected dark polished UI direction and m
 
 - Challenge validation is intentionally simple text matching, not a full quiz engine.
 - Overlay UI still uses Android Views because it runs from the accessibility service overlay, while the main app uses Compose.
+
+## 2026-04-25 Visual Overhaul
+
+### Prompt Summary
+
+Update the app and overlay visuals toward the shared dark green wellness UI reference, while keeping existing behavior and avoiding new dependencies.
+
+### Files Changed
+
+- `README.md`
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `app/src/main/java/com/frictionwellbeing/app/OverlayBlockerAccessibilityService.kt`
+- `docs/CODEX_LOG.md`
+- `docs/PROGRESS.md`
+
+### Build/Test Result
+
+- First `./gradlew build` failed on Compose helper button slot types after adding shared styled button wrappers.
+- Fixed once by wrapping button content in the expected slot.
+- Final `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the temporary dependency-free usage limit, friction state, overlay eligibility, and friction challenge tests.
+
+### Known Issues
+
+- The accessibility overlay still uses Android Views because it is rendered from the service window, so it cannot exactly match the Compose screens.
+- The UI uses gradients and shaped panels but does not yet include custom bitmap illustrations or meditation imagery.
+
+## 2026-04-25 Production Visual Pass
+
+### Prompt Summary
+
+Improve the UI quality further: use stronger font hierarchy, keep only four app menus, use a black UI with white secondary color and yellow accent, remove the revealed answer from the overlay, and improve both the app and overlay presentation.
+
+### Files Changed
+
+- `README.md`
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `app/src/main/java/com/frictionwellbeing/app/OverlayBlockerAccessibilityService.kt`
+- `docs/CODEX_LOG.md`
+- `docs/PROGRESS.md`
+
+### Build/Test Result
+
+- `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the dependency-free usage limit, friction state, overlay eligibility, and friction challenge tests.
+
+### Known Issues
+
+- Overlay UI is still Android Views from the accessibility service window.
+- Challenge validation remains simple text matching.
+
+## 2026-04-25 Overlay Repeat Modes
+
+### Prompt Summary
+
+Fix overlay repeat behavior so it can return after the configured interval, make the interval adjustable through Light/Heavy/Ultra Focus modes, and make Ultra Focus block selected target apps until its timer ends.
+
+### Files Changed
+
+- `README.md`
+- `app/build.gradle.kts`
+- `app/src/main/java/com/frictionwellbeing/app/AppSettings.kt`
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `app/src/main/java/com/frictionwellbeing/app/OverlayBlockerAccessibilityService.kt`
+- `app/src/main/java/com/frictionwellbeing/app/OverlayFrictionEligibility.java`
+- `app/src/main/java/com/frictionwellbeing/app/OverlayRepeatMode.java`
+- `app/src/test/java/com/frictionwellbeing/app/OverlayFrictionEligibilityTest.java`
+- `app/src/test/java/com/frictionwellbeing/app/OverlayRepeatModeTest.java`
+- `docs/CODEX_LOG.md`
+- `docs/DECISIONS.md`
+- `docs/PRIVACY.md`
+- `docs/PROGRESS.md`
+- `docs/ROADMAP.md`
+
+### Build/Test Result
+
+- `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the dependency-free usage limit, friction state, overlay eligibility, friction challenge, and overlay repeat mode tests.
+
+### Known Issues
+
+- Ultra Focus disables controls inside the app until the timer ends, but Android system settings can still revoke Accessibility or overlay permissions.
+- Ultra Focus duration is currently fixed at 25 minutes.
+
+## 2026-04-25 Typography and Navigation Polish
+
+### Prompt Summary
+
+Improve UI font hierarchy and branding, hide permission setup inside Settings, and make the app feel more creative and attractive without adding dependencies.
+
+### Files Changed
+
+- `README.md`
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `docs/CODEX_LOG.md`
+- `docs/PROGRESS.md`
+
+### Build/Test Result
+
+- `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the dependency-free usage limit, friction state, overlay eligibility, friction challenge, and overlay repeat mode tests.
+
+### Known Issues
+
+- The typography uses Android's bundled sans-serif family because no new font dependency or bundled font asset was added.
+
+## 2026-04-25 Mode Placement Fix
+
+### Prompt Summary
+
+Move Light/Heavy/Ultra mode selection to the Home screen, move friction status and overlay blocker controls to Settings, and make mode switching easier to access.
+
+### Files Changed
+
+- `app/src/main/java/com/frictionwellbeing/app/MainActivity.kt`
+- `docs/CODEX_LOG.md`
+- `docs/PROGRESS.md`
+
+### Build/Test Result
+
+- `./gradlew build` passed.
+- Gradle ran Android compilation, lint, standard unit test tasks, and the dependency-free usage limit, friction state, overlay eligibility, friction challenge, and overlay repeat mode tests.
+
+### Known Issues
+
+- Ultra Focus still intentionally prevents switching modes inside the app until its timer ends.

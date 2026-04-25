@@ -33,6 +33,14 @@ public final class OverlayFrictionEligibility {
     }
 
     public static long allowedUntil(long nowMillis) {
-        return nowMillis + DEFAULT_ALLOW_WINDOW_MILLIS;
+        return allowedUntil(nowMillis, OverlayRepeatMode.HEAVY);
+    }
+
+    public static long allowedUntil(long nowMillis, String repeatMode) {
+        return nowMillis + OverlayRepeatMode.allowWindowMillis(repeatMode);
+    }
+
+    public static long allowedUntil(long nowMillis, long allowWindowMillis) {
+        return nowMillis + Math.max(0L, allowWindowMillis);
     }
 }

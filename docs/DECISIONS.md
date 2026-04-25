@@ -31,3 +31,5 @@
 - Store only a per-package allow-until timestamp for overlay cooldown. The default allow window is 2 minutes so friction can return quickly during real use.
 - Keep overlay eligibility and cooldown rules in a small plain Java class so they can be tested without adding dependencies.
 - Use challenge-style friction copy for the overlay instead of a plain intention prompt. Continue requires the countdown to finish and the input to include the expected challenge answer.
+- Add overlay repeat modes instead of one fixed cooldown: Light repeats after 10 minutes, Heavy repeats after 2 minutes, and Ultra Focus starts a timed 25-minute target-app lock.
+- While Ultra Focus is active, the app disables its overlay mode controls until the timer ends. Users can still use Android system-level controls outside the app.

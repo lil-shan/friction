@@ -3,8 +3,32 @@ package com.frictionwellbeing.app;
 public final class FrictionChallengeTest {
     public static void main(String[] args) {
         acceptsCorrectAnswersInsideLongerIntentions();
+        lightModeAcceptsSimpleAnswers();
+        heavyModeRejectsSimpleAnswers();
         rejectsWrongAnswers();
         keepsChallengeIndexStableWithinAllowWindow();
+    }
+
+    private static void lightModeAcceptsSimpleAnswers() {
+        assertTrue(
+                FrictionChallenge.isAnswerValid(
+                        0,
+                        "7 - quick check before opening",
+                        OverlayRepeatMode.LIGHT
+                ),
+                "light mode should accept simple arithmetic answers"
+        );
+    }
+
+    private static void heavyModeRejectsSimpleAnswers() {
+        assertFalse(
+                FrictionChallenge.isAnswerValid(
+                        0,
+                        "7 - quick check before opening",
+                        OverlayRepeatMode.HEAVY
+                ),
+                "heavy mode should not use the light-mode simple question"
+        );
     }
 
     private static void acceptsCorrectAnswersInsideLongerIntentions() {

@@ -7,6 +7,7 @@ public final class OverlayFrictionEligibilityTest {
         allowsWhenAtLimitAndPermissionsReady();
         allowsStrictModeBeforeLimit();
         usesTwoMinuteAllowWindow();
+        usesModeSpecificAllowWindow();
     }
 
     private static void blocksWhenModeIsOff() {
@@ -82,6 +83,14 @@ public final class OverlayFrictionEligibilityTest {
                 121000L,
                 OverlayFrictionEligibility.allowedUntil(1000L),
                 "overlay allow window should be two minutes"
+        );
+    }
+
+    private static void usesModeSpecificAllowWindow() {
+        assertEquals(
+                601000L,
+                OverlayFrictionEligibility.allowedUntil(1000L, OverlayRepeatMode.LIGHT),
+                "light mode should allow for ten minutes"
         );
     }
 

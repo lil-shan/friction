@@ -46,3 +46,18 @@
 - Updated the app to a dark modern theme and made the friction overlay copy more engaging with rotating geography, logic, and focus prompts.
 - Changed the overlay allow window from 5 minutes to 2 minutes so friction can repeat sooner after Continue.
 - Added validated friction challenge logic and a dependency-free test. Continue now requires the countdown to finish and the input to include the expected answer.
+- Completed a visual overhaul pass with a black UI, white secondary text, yellow accent, stronger hierarchy, four bottom tabs, rounded translucent cards, status chips, metric bubbles, styled app rows, and a richer dark overlay panel.
+- Moved Overlay Blocker controls into Settings so the app has four primary menus: Home, Apps, Access, and Settings.
+- Removed the expected answer reveal from friction UI copy while keeping answer validation.
+- Ran `./gradlew build`; build passed with lint and the dependency-free logic tests.
+- Added Light, Heavy, and Ultra Focus repeat modes in Settings.
+- Fixed overlay repeat behavior by scheduling a re-check when the current allow window expires while a target app is still foreground.
+- Ultra Focus starts a 25-minute target-app lock and disables the in-app overlay controls until the timer ends.
+- Added dependency-free repeat mode tests and ran `./gradlew build`; build passed.
+- Reworked navigation to Home, Apps, Focus, and Settings; permission setup is now kept inside Settings instead of a primary Access tab.
+- Added a branded typography scale with stronger display, title, label, and body hierarchy.
+- Added a Focus screen that explains the active repeat mode and current target count.
+- Ran `./gradlew build`; build passed.
+- Moved Light/Heavy/Ultra mode selection from Settings to Home so it is easier to switch modes.
+- Moved friction status and overlay blocker controls into Settings with permission setup.
+- Ran `./gradlew build`; build passed.

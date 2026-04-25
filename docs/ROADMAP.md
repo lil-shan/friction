@@ -20,6 +20,8 @@
 - [x] Add overlay friction prompt with countdown, challenge/intention text, leave action, and 2-minute local allow window.
 - [x] Switch the app and overlay toward a dark modern visual style.
 - [x] Validate friction challenge answers before enabling Continue.
+- [x] Add Light, Heavy, and Ultra Focus overlay repeat modes.
+- [x] Schedule overlay repeat checks so friction can return while the target app remains foreground.
 - [x] Add dependency-free overlay eligibility and cooldown logic test wired into Gradle `check`.
 
 ## Product Modes

@@ -8,6 +8,8 @@ The MVP stores:
 - Default daily limit in minutes.
 - Overlay Blocker Mode on/off state.
 - Strict overlay mode on/off state.
+- Overlay repeat mode.
+- Ultra Focus end timestamp.
 - Temporary per-package overlay allow-until timestamps.
 
 The MVP locally queries usage stats:

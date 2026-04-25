@@ -8,6 +8,11 @@ object AppSettings {
     private const val KEY_DAILY_LIMIT_MINUTES = "daily_limit_minutes"
     private const val KEY_OVERLAY_BLOCKER_ENABLED = "overlay_blocker_enabled"
     private const val KEY_STRICT_OVERLAY_MODE = "strict_overlay_mode"
+    private const val KEY_OVERLAY_REPEAT_MODE = "overlay_repeat_mode"
+    private const val KEY_ULTRA_FOCUS_UNTIL = "ultra_focus_until"
+    private const val KEY_LIGHT_MODE_MINUTES = "light_mode_minutes"
+    private const val KEY_HEAVY_MODE_MINUTES = "heavy_mode_minutes"
+    private const val KEY_ULTRA_FOCUS_MINUTES = "ultra_focus_minutes"
     private const val ALLOWED_UNTIL_PREFIX = "allowed_until_"
     private const val DEFAULT_DAILY_LIMIT_MINUTES = 15
 
@@ -38,6 +43,71 @@ object AppSettings {
     fun saveStrictOverlayMode(context: Context, enabled: Boolean) {
         preferences(context).edit().putBoolean(KEY_STRICT_OVERLAY_MODE, enabled).apply()
     }
+
+    fun overlayRepeatMode(context: Context): String =
+        preferences(context).getString(KEY_OVERLAY_REPEAT_MODE, OverlayRepeatMode.HEAVY)
+            ?: OverlayRepeatMode.HEAVY
+
+    fun saveOverlayRepeatMode(context: Context, mode: String) {
+        preferences(context).edit().putString(KEY_OVERLAY_REPEAT_MODE, mode).apply()
+    }
+
+    fun lightModeMinutes(context: Context): Int =
+        preferences(context).getInt(
+            KEY_LIGHT_MODE_MINUTES,
+            OverlayRepeatMode.DEFAULT_LIGHT_MINUTES,
+        )
+
+    fun saveLightModeMinutes(context: Context, minutes: Int) {
+        preferences(context).edit()
+            .putInt(KEY_LIGHT_MODE_MINUTES, minutes.coerceAtLeast(1))
+            .apply()
+    }
+
+    fun heavyModeMinutes(context: Context): Int =
+        preferences(context).getInt(
+            KEY_HEAVY_MODE_MINUTES,
+            OverlayRepeatMode.DEFAULT_HEAVY_MINUTES,
+        )
+
+    fun saveHeavyModeMinutes(context: Context, minutes: Int) {
+        preferences(context).edit()
+            .putInt(KEY_HEAVY_MODE_MINUTES, minutes.coerceAtLeast(1))
+            .apply()
+    }
+
+    fun ultraFocusMinutes(context: Context): Int =
+        preferences(context).getInt(
+            KEY_ULTRA_FOCUS_MINUTES,
+            OverlayRepeatMode.DEFAULT_ULTRA_FOCUS_MINUTES,
+        )
+
+    fun saveUltraFocusMinutes(context: Context, minutes: Int) {
+        preferences(context).edit()
+            .putInt(KEY_ULTRA_FOCUS_MINUTES, minutes.coerceAtLeast(1))
+            .apply()
+    }
+
+    fun allowWindowMillis(context: Context, mode: String): Long =
+        when (mode) {
+            OverlayRepeatMode.LIGHT -> OverlayRepeatMode.minutesToMillis(lightModeMinutes(context))
+            OverlayRepeatMode.HEAVY -> OverlayRepeatMode.minutesToMillis(heavyModeMinutes(context))
+            else -> 0L
+        }
+
+    fun ultraFocusDurationMillis(context: Context): Long =
+        OverlayRepeatMode.minutesToMillis(ultraFocusMinutes(context))
+
+    fun ultraFocusUntilMillis(context: Context): Long =
+        preferences(context).getLong(KEY_ULTRA_FOCUS_UNTIL, 0L)
+
+    fun saveUltraFocusUntilMillis(context: Context, untilMillis: Long) {
+        preferences(context).edit().putLong(KEY_ULTRA_FOCUS_UNTIL, untilMillis).apply()
+    }
+
+    fun ultraFocusActive(context: Context, nowMillis: Long = System.currentTimeMillis()): Boolean =
+        overlayRepeatMode(context) == OverlayRepeatMode.ULTRA_FOCUS &&
+            ultraFocusUntilMillis(context) > nowMillis
 
     fun allowedUntilMillis(context: Context, packageName: String): Long =
         preferences(context).getLong(ALLOWED_UNTIL_PREFIX + packageName, 0L)

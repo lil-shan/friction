@@ -56,9 +56,14 @@ Overlay Blocker Mode is an optional experimental mode:
 - Optional Overlay Blocker settings screen with local on/off state, strict mode, and setup links for Usage Access, Accessibility, and Display over other apps.
 - Experimental `AccessibilityService` that detects selected foreground target apps by package name.
 - Experimental overlay friction prompt for selected target apps when the app is at or over the daily limit, or when strict overlay mode is enabled.
-- Temporary local allow window after completing overlay friction: 2 minutes per package.
+- Mode-based overlay repeat behavior:
+  - Light: friction can return after 10 minutes.
+  - Heavy: friction can return after 2 minutes.
+  - Ultra Focus: selected target apps stay blocked for a 25-minute focus window.
 - Dark modern UI theme with challenge-style friction prompts.
 - Challenge prompts now require the expected answer before Continue is enabled.
+- Production visual pass with a black UI, white secondary text, yellow accent, stronger hierarchy, four bottom tabs, rounded cards, status chips, usage bubbles, and a richer overlay blocker panel.
+- Branded typography pass with stronger display/title/body hierarchy and permission setup folded into Settings instead of a primary tab.
 
 ## Implementation Order
 
